@@ -5,10 +5,9 @@ const LLM_PROVIDERS = ["openai", "anthropic"] as const;
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
 export type Config = {
+  aiGatewayApiKey: string;
   llmProvider: LlmProvider;
   llmModel: string;
-  openaiApiKey?: string;
-  anthropicApiKey?: string;
   databasePath: string;
 };
 
@@ -34,33 +33,18 @@ export function loadConfig(): Config {
     );
   }
 
+  const aiGatewayApiKey = requireNonEmpty(
+    "AI_GATEWAY_API_KEY",
+    process.env.AI_GATEWAY_API_KEY,
+  );
   const llmModel = requireNonEmpty("LLM_MODEL", process.env.LLM_MODEL);
   const databasePath =
     process.env.DATABASE_PATH?.trim() || "./data/expenses.db";
 
-  if (llmProviderRaw === "openai") {
-    const openaiApiKey = requireNonEmpty(
-      "OPENAI_API_KEY",
-      process.env.OPENAI_API_KEY,
-    );
-
-    return {
-      llmProvider: llmProviderRaw,
-      llmModel,
-      openaiApiKey,
-      databasePath,
-    };
-  }
-
-  const anthropicApiKey = requireNonEmpty(
-    "ANTHROPIC_API_KEY",
-    process.env.ANTHROPIC_API_KEY,
-  );
-
   return {
+    aiGatewayApiKey,
     llmProvider: llmProviderRaw,
     llmModel,
-    anthropicApiKey,
     databasePath,
   };
 }

@@ -2,14 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { initSchema, openDatabase } from "../../db/connection.js";
 import {
   countExpenses,
   getExpenseByKey,
-  initSchema,
   insertExpenses,
-  openDatabase,
   type ExpenseInput,
-} from "./db.js";
+} from "./repository.js";
 
 const TEST_SOURCE_AUTHOR = "+48000000000";
 
@@ -28,7 +27,7 @@ function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
   };
 }
 
-describe("db", () => {
+describe("expenses repository", () => {
   let tempDir: string;
   let dbPath: string;
 
