@@ -1,163 +1,80 @@
+import * as net from "node:net";
+import * as readline from "node:readline";
+import { randomUUID } from "node:crypto";
 import type { Config } from "../config.js";
 import { logger } from "../lib/logger.js";
-
-const RECONNECT_DELAY_MS = 2_000;
-
-export function buildReceiveWebSocketUrl(config: Config): string {
-  const apiUrl = new URL(config.signalApiUrl);
-  apiUrl.protocol = apiUrl.protocol === "https:" ? "wss:" : "ws:";
-  apiUrl.pathname = `/v1/receive/${encodeURIComponent(config.signalPhoneNumber)}`;
-  apiUrl.search = "";
-
-  return apiUrl.toString();
-}
-
-export function parseWebSocketPayload(data: unknown): unknown | null {
-  if (typeof data === "string") {
-    try {
-      return JSON.parse(data);
-    } catch {
-      return null;
-    }
-  }
-
-  if (data instanceof ArrayBuffer) {
-    return parseWebSocketPayload(new TextDecoder().decode(data));
-  }
-
-  if (ArrayBuffer.isView(data)) {
-    return parseWebSocketPayload(new TextDecoder().decode(data));
-  }
-
-  return null;
-}
-
-function delay(ms: number, signal?: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-
-    const timeout = setTimeout(resolve, ms);
-    const onAbort = () => {
-      clearTimeout(timeout);
-      resolve();
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-async function readSocket(
-  config: Config,
-  onPayload: (payload: unknown) => Promise<void>,
-  signal?: AbortSignal,
-): Promise<void> {
-  const url = buildReceiveWebSocketUrl(config);
-  logger.info({ url }, "signal connecting");
-  const socket = new WebSocket(url);
-
-  const activeTasks = new Set<Promise<void>>();
-
-  await new Promise<void>((resolve) => {
-    let settled = false;
-
-    const settle = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      signal?.removeEventListener("abort", onAbort);
-      resolve();
-    };
-
-    const onAbort = () => {
-      socket.close();
-      settle();
-    };
-
-    signal?.addEventListener("abort", onAbort, { once: true });
-
-    socket.addEventListener("open", () => {
-      logger.info("signal connected");
-    });
-
-    socket.addEventListener("message", (event) => {
-      const parsed = parseWebSocketPayload(event.data);
-      if (parsed === null) {
-        logger.warn("signal received non-JSON payload");
-        return;
-      }
-
-      const items = Array.isArray(parsed) ? parsed : [parsed];
-
-      const task = (async () => {
-        for (const item of items) {
-          try {
-            await onPayload(item);
-          } catch (error) {
-            logger.warn({ error }, "Failed to handle Signal payload");
-          }
-        }
-      })();
-
-      activeTasks.add(task);
-      task.finally(() => activeTasks.delete(task));
-    });
-
-    socket.addEventListener("error", () => {
-      logger.warn("signal websocket error");
-      try {
-        socket.close();
-      } catch {
-        // ignore close failures after a failed handshake
-      }
-      settle();
-    });
-
-    socket.addEventListener("close", () => {
-      logger.info("signal disconnected");
-      settle();
-    });
-
-    if (signal?.aborted) {
-      socket.close();
-      settle();
-    }
-  });
-
-  if (activeTasks.size > 0) {
-    logger.info({ tasks: activeTasks.size }, "waiting for active tasks to finish");
-    await Promise.allSettled(Array.from(activeTasks));
-  }
-}
 
 export async function listenForMessages(
   config: Config,
   onPayload: (payload: unknown) => Promise<void>,
-  options: { signal?: AbortSignal; reconnectDelayMs?: number } = {},
+  options: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  const reconnectDelayMs = options.reconnectDelayMs ?? RECONNECT_DELAY_MS;
+  let reconnectTimeout: NodeJS.Timeout | null = null;
+  let socket: net.Socket | null = null;
 
-  while (!options.signal?.aborted) {
-    try {
-      await readSocket(config, onPayload, options.signal);
-    } catch (error) {
-      if (options.signal?.aborted) {
-        return;
+  const connect = () => {
+    if (options.signal?.aborted) return;
+
+    logger.info({ host: config.signalRpcHost, port: config.signalRpcPort }, "Connecting to signal-cli JSON-RPC...");
+    
+    socket = net.createConnection({
+      host: config.signalRpcHost,
+      port: config.signalRpcPort,
+    });
+
+    socket.on("connect", () => {
+      logger.info("Connected to signal-cli JSON-RPC");
+    });
+
+    const rl = readline.createInterface({
+      input: socket,
+      crlfDelay: Infinity,
+    });
+
+    rl.on("error", (err) => {
+       logger.warn({ err }, "Readline error");
+    });
+
+    rl.on("line", (line) => {
+      if (!line.trim()) return;
+      try {
+        const payload = JSON.parse(line);
+        if (payload.method === "receive") {
+          onPayload(payload).catch((err) => {
+            logger.error({ err }, "Failed to process payload in onPayload");
+          });
+        }
+      } catch (err) {
+        logger.error({ err, line }, "Failed to parse JSON-RPC line");
       }
+    });
 
-      logger.warn({ error }, "Signal WebSocket error");
-    }
+    socket.on("error", (error) => {
+      logger.error({ error }, "signal-cli JSON-RPC socket error");
+    });
 
-    if (options.signal?.aborted) {
-      return;
-    }
+    socket.on("close", () => {
+      if (options.signal?.aborted) return;
+      logger.warn("signal-cli JSON-RPC socket closed, reconnecting in 5s...");
+      reconnectTimeout = setTimeout(connect, 5000);
+    });
+  };
 
-    logger.info({ reconnectDelayMs }, "signal reconnecting");
-    await delay(reconnectDelayMs, options.signal);
+  connect();
+
+  if (options.signal) {
+    options.signal.addEventListener("abort", () => {
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socket) socket.destroy();
+    });
   }
+
+  return new Promise((resolve) => {
+    if (options.signal) {
+      if (options.signal.aborted) return resolve();
+      options.signal.addEventListener("abort", () => resolve());
+    }
+  });
 }
 
 export async function sendMessage(
@@ -165,19 +82,55 @@ export async function sendMessage(
   recipient: string,
   message: string,
 ): Promise<void> {
-  const url = new URL("/v2/send", config.signalApiUrl);
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      number: config.signalPhoneNumber,
-      recipients: [recipient],
-    }),
-  });
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection({
+      host: config.signalRpcHost,
+      port: config.signalRpcPort,
+    });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Signal send failed: ${response.status} ${body}`);
-  }
+    const id = randomUUID();
+    const payload = {
+      jsonrpc: "2.0",
+      method: "send",
+      params: {
+        message,
+        recipient: [recipient],
+        notifySelf: true,
+      },
+      id,
+    };
+
+    socket.on("connect", () => {
+      socket.write(JSON.stringify(payload) + "\n");
+    });
+
+    const rl = readline.createInterface({
+      input: socket,
+      crlfDelay: Infinity,
+    });
+
+    rl.on("line", (line) => {
+      if (!line.trim()) return;
+      try {
+        const response = JSON.parse(line);
+        if (response.id === id) {
+          if (response.error) {
+            reject(new Error(`Signal send failed: ${JSON.stringify(response.error)}`));
+          } else {
+            resolve();
+          }
+          socket.destroy();
+        }
+      } catch (err) {}
+    });
+
+    socket.on("error", (error) => {
+      reject(error);
+    });
+    
+    setTimeout(() => {
+      socket.destroy();
+      reject(new Error("Send command timed out"));
+    }, 10000);
+  });
 }

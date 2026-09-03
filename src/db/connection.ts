@@ -36,4 +36,19 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
       "item_index",
     ])
     .execute();
+
+  await db.schema
+    .createTable("inbox")
+    .ifNotExists()
+    .addColumn("message_key", "text", (col) => col.primaryKey())
+    .addColumn("raw_envelope", "text", (col) => col.notNull())
+    .addColumn("status", "text", (col) => col.notNull())
+    .addColumn("parsed_json", "text")
+    .addColumn("response_text", "text")
+    .addColumn("attempts", "integer", (col) => col.notNull().defaultTo(0))
+    .addColumn("next_attempt_at", "integer")
+    .addColumn("lease_until", "integer")
+    .addColumn("lease_token", "text")
+    .addColumn("received_at", "integer", (col) => col.notNull())
+    .execute();
 }

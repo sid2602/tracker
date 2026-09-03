@@ -19,7 +19,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
-  signalApiUrl: "http://127.0.0.1:8080",
+  signalRpcHost: "signal-cli-rest-api",
+  signalRpcPort: 6001,
   signalPhoneNumber: "+15005550100",
   langfusePublicKey: null,
   langfuseSecretKey: null,
@@ -84,7 +85,7 @@ describe("handleExpense", () => {
     );
 
     const result = await handleExpense(deps, {
-      sourceAuthor: TEST_SOURCE_AUTHOR,
+      messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
       sourceTimestamp: 1_700_000_000_000,
       rawText: "zakupy 15 zl",
     });
@@ -127,7 +128,7 @@ describe("handleExpense", () => {
     );
 
     const result = await handleExpense(deps, {
-      sourceAuthor: TEST_SOURCE_AUTHOR,
+      messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
       sourceTimestamp: 1_700_000_000_001,
       rawText: "chleb 10 zl, mleko 5 zl",
     });
@@ -144,7 +145,7 @@ describe("handleExpense", () => {
     parseExpensesMock.mockRejectedValue(new Error("invalid response"));
 
     const result = await handleExpense(deps, {
-      sourceAuthor: TEST_SOURCE_AUTHOR,
+      messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
       sourceTimestamp: 1_700_000_000_002,
       rawText: "cos niejasnego",
     });
@@ -158,7 +159,7 @@ describe("handleExpense", () => {
 
   it("ignores duplicate message on second insert", async () => {
     const context = {
-      sourceAuthor: TEST_SOURCE_AUTHOR,
+      messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
       sourceTimestamp: 1_700_000_000_003,
       rawText: "zakupy 15 zl",
     };

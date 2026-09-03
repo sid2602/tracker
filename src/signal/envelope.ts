@@ -64,14 +64,18 @@ export function parseEnvelope(payload: unknown): MessageContext | null {
   const rawText = extractText(envelope);
   const sourceAuthor = extractAuthor(envelope);
   const sourceTimestamp = extractTimestamp(envelope);
+  const sourceDevice = typeof envelope.sourceDevice === "number" ? envelope.sourceDevice : 0;
 
   if (!rawText || !sourceAuthor || sourceTimestamp === null) {
     return null;
   }
 
+  const messageKey = `${sourceAuthor}-${sourceDevice}-${sourceTimestamp}`;
+
   return {
     sourceAuthor,
     sourceTimestamp,
     rawText,
+    messageKey,
   };
 }

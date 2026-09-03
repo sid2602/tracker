@@ -32,7 +32,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
-  signalApiUrl: "http://127.0.0.1:8080",
+  signalRpcHost: "signal-cli-rest-api",
+  signalRpcPort: 6001,
   signalPhoneNumber: "+15005550100",
   langfusePublicKey: null,
   langfuseSecretKey: null,
@@ -41,7 +42,7 @@ const config: Config = {
 
 const deps = { db: {}, config } as AppDeps;
 const context = {
-  sourceAuthor: "+15005550100",
+  messageKey: "test-key", sourceAuthor: "+15005550100",
   sourceTimestamp: 1,
   rawText: "groceries 15 pln",
 };

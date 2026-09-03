@@ -14,6 +14,20 @@ export interface ExpenseTable {
   created_at: string;
 }
 
+export interface InboxTable {
+  message_key: string;
+  raw_envelope: string;
+  status: "pending" | "analyzed" | "saved" | "confirmed" | "ignored";
+  parsed_json: string | null;
+  response_text: string | null;
+  attempts: number;
+  next_attempt_at: number | null;
+  lease_until: number | null;
+  lease_token: string | null;
+  received_at: number;
+}
+
 export interface AppDatabase {
   expenses: ExpenseTable;
+  inbox: InboxTable;
 }

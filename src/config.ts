@@ -10,7 +10,8 @@ const configSchema = z.object({
   LLM_PROVIDER: z.enum(LLM_PROVIDERS),
   LLM_MODEL: z.string().min(1),
   DATABASE_PATH: z.string().default("./data/expenses.db"),
-  SIGNAL_API_URL: z.string().url(),
+  SIGNAL_RPC_HOST: z.string().min(1),
+  SIGNAL_RPC_PORT: z.coerce.number().int().positive(),
   SIGNAL_PHONE_NUMBER: z.string().min(1),
   LANGFUSE_PUBLIC_KEY: z.string().trim().min(1).nullable().default(null),
   LANGFUSE_SECRET_KEY: z.string().trim().min(1).nullable().default(null),
@@ -22,7 +23,8 @@ export type Config = {
   llmProvider: LlmProvider;
   llmModel: string;
   databasePath: string;
-  signalApiUrl: string;
+  signalRpcHost: string;
+  signalRpcPort: number;
   signalPhoneNumber: string;
   langfusePublicKey: string | null;
   langfuseSecretKey: string | null;
@@ -44,7 +46,8 @@ export function loadConfig(): Config {
     llmProvider: parsed.LLM_PROVIDER,
     llmModel: parsed.LLM_MODEL,
     databasePath: parsed.DATABASE_PATH,
-    signalApiUrl: parsed.SIGNAL_API_URL,
+    signalRpcHost: parsed.SIGNAL_RPC_HOST,
+    signalRpcPort: parsed.SIGNAL_RPC_PORT,
     signalPhoneNumber: parsed.SIGNAL_PHONE_NUMBER,
     langfusePublicKey: parsed.LANGFUSE_PUBLIC_KEY,
     langfuseSecretKey: parsed.LANGFUSE_SECRET_KEY,

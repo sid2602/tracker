@@ -15,7 +15,7 @@ import type { ReportParams } from "./schema.js";
 const TEST_SOURCE_AUTHOR = "+15005550100";
 const NOW = new Date("2026-09-15T12:00:00.000Z");
 const context = {
-  sourceAuthor: TEST_SOURCE_AUTHOR,
+  messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
   sourceTimestamp: 1_700_000_000_000,
   rawText: "report",
 };
@@ -34,7 +34,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
-  signalApiUrl: "http://127.0.0.1:8080",
+  signalRpcHost: "signal-cli-rest-api",
+  signalRpcPort: 6001,
   signalPhoneNumber: "+15005550100",
   langfusePublicKey: null,
   langfuseSecretKey: null,

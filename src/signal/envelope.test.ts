@@ -17,7 +17,7 @@ describe("parseEnvelope", () => {
         },
       }),
     ).toEqual({
-      sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "groceries 15 pln",
     });
@@ -36,7 +36,7 @@ describe("parseEnvelope", () => {
         },
       }),
     ).toEqual({
-      sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "fuel 40 pln",
     });
@@ -58,7 +58,7 @@ describe("parseEnvelope", () => {
         },
       }),
     ).toEqual({
-      sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "report this month",
     });
@@ -78,7 +78,7 @@ describe("parseEnvelope", () => {
         },
       }),
     ).toEqual({
-      sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "Saved 1 item",
     });

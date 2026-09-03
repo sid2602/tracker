@@ -6,6 +6,7 @@ export type MessageContext = {
   sourceAuthor: string;
   sourceTimestamp: number;
   rawText: string;
+  messageKey: string;
 };
 
 export type HandlerResult =
