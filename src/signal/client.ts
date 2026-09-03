@@ -11,6 +11,7 @@ export async function listenForMessages(
 ): Promise<void> {
   let reconnectTimeout: NodeJS.Timeout | null = null;
   let socket: net.Socket | null = null;
+  let attempts = 0;
 
   const connect = () => {
     if (options.signal?.aborted) return;
@@ -23,6 +24,7 @@ export async function listenForMessages(
     });
 
     socket.on("connect", () => {
+      attempts = 0;
       logger.info("Connected to signal-cli JSON-RPC");
     });
 
@@ -55,8 +57,10 @@ export async function listenForMessages(
 
     socket.on("close", () => {
       if (options.signal?.aborted) return;
-      logger.warn("signal-cli JSON-RPC socket closed, reconnecting in 5s...");
-      reconnectTimeout = setTimeout(connect, 5000);
+      attempts++;
+      const delayMs = Math.min(5000 * Math.pow(2, attempts - 1), 60000);
+      logger.warn(`signal-cli JSON-RPC socket closed, reconnecting in ${delayMs}ms (attempt ${attempts})...`);
+      reconnectTimeout = setTimeout(connect, delayMs);
     });
   };
 
@@ -109,6 +113,13 @@ export async function sendMessage(
       crlfDelay: Infinity,
     });
 
+    let timeoutId: NodeJS.Timeout;
+    
+    const cleanup = () => {
+      clearTimeout(timeoutId);
+      socket.destroy();
+    };
+
     rl.on("line", (line) => {
       if (!line.trim()) return;
       try {
@@ -119,17 +130,18 @@ export async function sendMessage(
           } else {
             resolve();
           }
-          socket.destroy();
+          cleanup();
         }
       } catch (err) {}
     });
 
     socket.on("error", (error) => {
+      cleanup();
       reject(error);
     });
     
-    setTimeout(() => {
-      socket.destroy();
+    timeoutId = setTimeout(() => {
+      cleanup();
       reject(new Error("Send command timed out"));
     }, 10000);
   });

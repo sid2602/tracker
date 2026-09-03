@@ -24,7 +24,7 @@ export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void
     .ignore()
     .values({
       message_key: context.messageKey,
-      raw_envelope: JSON.stringify(payload),
+      raw_envelope: JSON.stringify(context),
       status: "pending",
       attempts: 0,
       received_at: now.getTime(),
@@ -96,8 +96,18 @@ export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
     return false;
   }
 
-  const payload = JSON.parse(item.raw_envelope);
-  const context = parseEnvelope(payload);
+  let context;
+  try {
+    const parsed = JSON.parse(item.raw_envelope);
+    // If it's a slim context (new format) it has rawText, if it's a legacy raw envelope (old format) parseEnvelope handles it.
+    if (parsed && typeof parsed.rawText === "string") {
+      context = parsed;
+    } else {
+      context = parseEnvelope(parsed);
+    }
+  } catch (err) {
+    context = null;
+  }
 
   if (!context) {
     await deps.db
