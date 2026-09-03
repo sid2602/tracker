@@ -17,6 +17,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
+  signalApiUrl: "http://127.0.0.1:8080",
+  signalPhoneNumber: "+15005550100",
 };
 
 describe("parseExpenses", () => {

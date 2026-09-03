@@ -9,6 +9,8 @@ export type Config = {
   llmProvider: LlmProvider;
   llmModel: string;
   databasePath: string;
+  signalApiUrl: string;
+  signalPhoneNumber: string;
 };
 
 function isLlmProvider(value: string): value is LlmProvider {
@@ -21,6 +23,16 @@ function requireNonEmpty(name: string, value: string | undefined): string {
   }
 
   return value.trim();
+}
+
+function requireUrl(name: string, value: string | undefined): string {
+  const trimmed = requireNonEmpty(name, value);
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    throw new Error(`Invalid ${name}="${trimmed}"`);
+  }
 }
 
 export function loadConfig(): Config {
@@ -40,11 +52,21 @@ export function loadConfig(): Config {
   const llmModel = requireNonEmpty("LLM_MODEL", process.env.LLM_MODEL);
   const databasePath =
     process.env.DATABASE_PATH?.trim() || "./data/expenses.db";
+  const signalApiUrl = requireUrl(
+    "SIGNAL_API_URL",
+    process.env.SIGNAL_API_URL,
+  );
+  const signalPhoneNumber = requireNonEmpty(
+    "SIGNAL_PHONE_NUMBER",
+    process.env.SIGNAL_PHONE_NUMBER,
+  );
 
   return {
     aiGatewayApiKey,
     llmProvider: llmProviderRaw,
     llmModel,
     databasePath,
+    signalApiUrl,
+    signalPhoneNumber,
   };
 }

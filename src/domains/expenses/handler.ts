@@ -1,5 +1,6 @@
 import { TIME_ZONE } from "../../constants.js";
 import { getReferenceDate } from "../../lib/dates.js";
+import { MESSAGE_ALREADY_SAVED, savedItemsMessage } from "../../lib/messages.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
 import { parseExpenses } from "./parser.js";
 import { insertExpenses, type ExpenseInput } from "./repository.js";
@@ -24,18 +25,20 @@ export async function handleExpense(
     const expenses = mapParsedExpenses(parsed, context);
     const { inserted } = insertExpenses(deps.db, expenses);
 
+    console.log(
+      `[${new Date().toISOString()}] expense details: ${formatExpenseDetails(expenses)}`,
+    );
+
     if (inserted === 0) {
       return {
         kind: "success",
-        message: "✅ Wiadomosc juz byla zapisana",
+        message: MESSAGE_ALREADY_SAVED,
       };
     }
 
-    const suffix = inserted === 1 ? "pozycje" : "pozycji";
-
     return {
       kind: "success",
-      message: `✅ Zapisano ${inserted} ${suffix}`,
+      message: savedItemsMessage(inserted),
     };
   } catch (error) {
     const message =
@@ -43,6 +46,15 @@ export async function handleExpense(
 
     return { kind: "failure", message };
   }
+}
+
+function formatExpenseDetails(expenses: ExpenseInput[]): string {
+  return expenses
+    .map((expense) => {
+      const amount = (expense.amountCents / 100).toFixed(2);
+      return `${expense.category} ${amount} ${expense.currency} (${expense.note}) on ${expense.occurredOn}`;
+    })
+    .join("; ");
 }
 
 function mapParsedExpenses(
@@ -54,7 +66,7 @@ function mapParsedExpenses(
     sourceTimestamp: context.sourceTimestamp,
     itemIndex,
     amountCents: item.amountCents,
-    currency: item.currency,
+    currency: (item.currency ?? "PLN").toUpperCase(),
     category: item.category,
     occurredOn: item.occurredOn,
     note: item.note,

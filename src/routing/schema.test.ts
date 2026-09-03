@@ -1,13 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { routerResultSchema } from "./schema.js";
+import { routerLlmSchema, toRouterResult } from "./schema.js";
 
 describe("routing schema", () => {
-  it("accepts valid router intents", () => {
-    expect(routerResultSchema.parse({ intent: "expense" })).toEqual({
-      intent: "expense",
-    });
+  it("accepts a flat LLM object schema", () => {
     expect(
-      routerResultSchema.parse({
+      routerLlmSchema.parse({
+        intent: "expense",
+        period: null,
+        group_by: null,
+      }),
+    ).toEqual({
+      intent: "expense",
+      period: null,
+      group_by: null,
+    });
+
+    expect(
+      routerLlmSchema.parse({
         intent: "report",
         period: "this_month",
         group_by: "category",
@@ -17,12 +26,47 @@ describe("routing schema", () => {
       period: "this_month",
       group_by: "category",
     });
-    expect(routerResultSchema.parse({ intent: "ignore" })).toEqual({
-      intent: "ignore",
-    });
   });
 
   it("rejects unknown router intent", () => {
-    expect(() => routerResultSchema.parse({ intent: "unknown" })).toThrow();
+    expect(() =>
+      routerLlmSchema.parse({
+        intent: "unknown",
+        period: null,
+        group_by: null,
+      }),
+    ).toThrow();
+  });
+
+  it("normalizes LLM output into RouterResult", () => {
+    expect(
+      toRouterResult({
+        intent: "expense",
+        period: null,
+        group_by: null,
+      }),
+    ).toEqual({ intent: "expense" });
+
+    expect(
+      toRouterResult({
+        intent: "report",
+        period: "last_month",
+        group_by: "total",
+      }),
+    ).toEqual({
+      intent: "report",
+      period: "last_month",
+      group_by: "total",
+    });
+  });
+
+  it("rejects report without period or group_by", () => {
+    expect(() =>
+      toRouterResult({
+        intent: "report",
+        period: null,
+        group_by: "total",
+      }),
+    ).toThrow();
   });
 });

@@ -19,6 +19,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
+  signalApiUrl: "http://127.0.0.1:8080",
+  signalPhoneNumber: "+15005550100",
 };
 
 const deps = { db: {}, config } as AppDeps;
@@ -37,7 +39,7 @@ describe("dispatchMessage", () => {
   it("delegates expense intent to expenses domain", async () => {
     handleExpenseMock.mockResolvedValue({
       kind: "success",
-      message: "✅ Zapisano 1 pozycje",
+      message: "Saved 1 item",
     });
 
     const result = await dispatchMessage(deps, context, { intent: "expense" });
@@ -45,14 +47,14 @@ describe("dispatchMessage", () => {
     expect(handleExpenseMock).toHaveBeenCalledWith(deps, context);
     expect(result).toEqual({
       kind: "success",
-      message: "✅ Zapisano 1 pozycje",
+      message: "Saved 1 item",
     });
   });
 
   it("delegates report intent to reports domain", async () => {
     handleReportMock.mockResolvedValue({
-      kind: "failure",
-      message: "Raport nie jest jeszcze zaimplementowany",
+      kind: "success",
+      message: "📊 Report: this month\n\nno expenses",
     });
 
     const route = {
@@ -64,7 +66,10 @@ describe("dispatchMessage", () => {
     const result = await dispatchMessage(deps, context, route);
 
     expect(handleReportMock).toHaveBeenCalledWith(deps, route);
-    expect(result.kind).toBe("failure");
+    expect(result).toEqual({
+      kind: "success",
+      message: "📊 Report: this month\n\nno expenses",
+    });
   });
 
   it("returns silent for ignore intent", async () => {

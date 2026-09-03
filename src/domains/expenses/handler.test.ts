@@ -19,6 +19,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
+  signalApiUrl: "http://127.0.0.1:8080",
+  signalPhoneNumber: "+15005550100",
 };
 
 const parseExpensesMock = vi.fn<
@@ -51,9 +53,11 @@ describe("handleExpense", () => {
     initSchema(db);
     deps = { db, config };
     parseExpensesMock.mockReset();
+    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     deps.db.close();
     rmSync(tempDir, { recursive: true, force: true });
   });
@@ -79,7 +83,7 @@ describe("handleExpense", () => {
 
     expect(result).toEqual({
       kind: "success",
-      message: "✅ Zapisano 1 pozycje",
+      message: "Saved 1 item",
     });
     expect(countExpenses(deps.db)).toBe(1);
 
@@ -121,7 +125,7 @@ describe("handleExpense", () => {
 
     expect(result).toEqual({
       kind: "success",
-      message: "✅ Zapisano 2 pozycji",
+      message: "Saved 2 items",
     });
     expect(countExpenses(deps.db)).toBe(2);
   });
@@ -166,11 +170,11 @@ describe("handleExpense", () => {
 
     expect(first).toEqual({
       kind: "success",
-      message: "✅ Zapisano 1 pozycje",
+      message: "Saved 1 item",
     });
     expect(second).toEqual({
       kind: "success",
-      message: "✅ Wiadomosc juz byla zapisana",
+      message: "Message already saved",
     });
     expect(countExpenses(deps.db)).toBe(1);
   });

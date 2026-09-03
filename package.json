@@ -7,7 +7,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "dev:parse": "tsx src/scripts/dev-parse.ts"
+    "dev:parse": "tsx src/scripts/dev-parse.ts",
+    "start": "tsx src/worker.ts"
   },
   "dependencies": {
     "ai": "^5.0.44",

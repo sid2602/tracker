@@ -17,6 +17,8 @@ const config: Config = {
   llmProvider: "openai",
   llmModel: "gpt-4o-mini",
   databasePath: "./data/expenses.db",
+  signalApiUrl: "http://127.0.0.1:8080",
+  signalPhoneNumber: "+15005550100",
 };
 
 describe("routeMessage", () => {
@@ -26,7 +28,7 @@ describe("routeMessage", () => {
 
   it("accepts valid response", async () => {
     generateObjectMock.mockResolvedValue({
-      object: { intent: "expense" },
+      object: { intent: "expense", period: null, group_by: null },
     });
 
     await expect(routeMessage(config, "zakupy 15 zl")).resolves.toEqual({
@@ -38,7 +40,7 @@ describe("routeMessage", () => {
     generateObjectMock
       .mockRejectedValueOnce(new Error("invalid response"))
       .mockResolvedValueOnce({
-        object: { intent: "ignore" },
+        object: { intent: "ignore", period: null, group_by: null },
       });
 
     await expect(routeMessage(config, "losowa notatka")).resolves.toEqual({
@@ -46,5 +48,21 @@ describe("routeMessage", () => {
     });
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("normalizes report fields", async () => {
+    generateObjectMock.mockResolvedValue({
+      object: {
+        intent: "report",
+        period: "this_month",
+        group_by: "total",
+      },
+    });
+
+    await expect(routeMessage(config, "report this month")).resolves.toEqual({
+      intent: "report",
+      period: "this_month",
+      group_by: "total",
+    });
   });
 });

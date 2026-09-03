@@ -1,9 +1,14 @@
-export const getRouterPrompt = (text: string) => `Sklasyfikuj wiadomosc uzytkownika z notatki Signal.
-Zwroc intent:
-- expense: zapis wydatku (np. zakupy, paliwo, rachunek)
-- report: prosba o raport wydatkow (np. raport z tego miesiaca)
-- ignore: inna notatka bez akcji
+export const getRouterPrompt = (text: string) => `Classify a Signal note.
+The user message may be in any language.
 
-Dla report podaj period (this_month | last_month) i group_by (total | category).
+Return intent:
+- expense: logging a purchase or bill
+- report: asking for an expense report
+- ignore: anything else, including bot replies such as confirmations and reports
+  (for example messages containing "Saved", "Report", "✅", or "📊")
 
-Wiadomosc: ${text}`;
+Always return period and group_by:
+- for report: period is this_month or last_month, group_by is total or category
+- for expense or ignore: set period and group_by to null
+
+Message: ${text}`;

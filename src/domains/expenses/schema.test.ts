@@ -49,4 +49,20 @@ describe("expenses schema", () => {
 
     expect(result.items[0]?.amountCents).toBe(1500);
   });
+
+  it("accepts null currency", () => {
+    const result = expenseResultSchema.parse({
+      items: [
+        {
+          amountCents: 1500,
+          currency: null,
+          category: "groceries",
+          occurredOn: "2026-09-01",
+          note: "zakupy",
+        },
+      ],
+    });
+
+    expect(result.items[0]?.currency).toBeNull();
+  });
 });

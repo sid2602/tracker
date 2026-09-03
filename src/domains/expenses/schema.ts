@@ -16,11 +16,7 @@ export type ExpenseCategory = (typeof EXPENSE_CATEGORIES)[number];
 
 const expenseItemSchema = z.object({
   amountCents: z.number().int().positive(),
-  currency: z
-    .string()
-    .length(3)
-    .optional()
-    .transform((value) => (value ? value.toUpperCase() : "PLN")),
+  currency: z.string().length(3).nullable(),
   category: z.enum(EXPENSE_CATEGORIES),
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   note: z.string().min(1),
