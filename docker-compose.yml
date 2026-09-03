@@ -1,14 +1,13 @@
 services:
-  signal-cli-rest-api:
-    image: bbernhard/signal-cli-rest-api:latest
+  signal-cli:
+    image: registry.gitlab.com/packaging/signal-cli/signal-cli-native:latest
     container_name: tracker-signal
     restart: unless-stopped
     env_file:
       - .env
-    entrypoint: /bin/sh
-    command: -c "chown 1000:1000 -R /home/.local/share/signal-cli && exec setpriv --reuid=1000 --regid=1000 --init-groups --inh-caps=-all signal-cli -c /home/.local/share/signal-cli -u $${SIGNAL_PHONE_NUMBER} daemon --tcp 0.0.0.0:6001 --receive-mode on-connection"
+    command: --config /var/lib/signal-cli -u ${SIGNAL_PHONE_NUMBER} daemon --tcp 0.0.0.0:6001 --receive-mode on-connection
     volumes:
-      - ./signal-cli-config:/home/.local/share/signal-cli
+      - ./signal-cli-config:/var/lib/signal-cli
     depends_on:
       worker:
         condition: service_started
@@ -20,7 +19,7 @@ services:
     env_file:
       - .env
     environment:
-      SIGNAL_RPC_HOST: signal-cli-rest-api
+      SIGNAL_RPC_HOST: signal-cli
       SIGNAL_RPC_PORT: 6001
       DATABASE_PATH: /app/data/expenses.db
     volumes:

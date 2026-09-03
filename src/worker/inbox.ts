@@ -144,11 +144,11 @@ export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
           .where("message_key", "=", item.message_key)
           .where("lease_token", "=", leaseToken)
           .execute();
-          
+
         if (result.kind === "success") {
-           logger.info({ message: result.message }, "success");
+          logger.info({ message: result.message }, "success");
         } else {
-           logger.info({ message: result.message }, "failure");
+          logger.info({ message: result.message }, "failure");
         }
       }
     );
@@ -156,8 +156,9 @@ export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
     logger.warn({ error, messageKey: item.message_key }, "Failed to process inbox item");
 
     const attempts = item.attempts + 1;
-    const backoffMs = Math.pow(2, attempts) * 1000;
-    
+    // Increase backoff to avoid hammering the API if 429 occurs (10s, 20s, 40s, 80s)
+    const backoffMs = Math.pow(2, attempts) * 5000;
+
     await deps.db
       .updateTable("inbox")
       .set({
@@ -181,7 +182,10 @@ export async function runInboxProcessor(
   while (!signal.aborted) {
     try {
       const didWork = await processNextInboxItem(deps);
-      if (!didWork && !signal.aborted) {
+      if (didWork && !signal.aborted) {
+        // Throttle processing of consecutive messages to prevent 429 Too Many Requests
+        await new Promise((resolve) => setTimeout(resolve, 10000));
+      } else if (!didWork && !signal.aborted) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       }
     } catch (error) {
