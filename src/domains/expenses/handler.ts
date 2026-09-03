@@ -1,4 +1,5 @@
 import { TIME_ZONE } from "../../constants.js";
+import { logger } from "../../lib/logger.js";
 import { getReferenceDate } from "../../lib/dates.js";
 import { MESSAGE_ALREADY_SAVED, savedItemsMessage } from "../../lib/messages.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
@@ -25,9 +26,7 @@ export async function handleExpense(
     const expenses = mapParsedExpenses(parsed, context);
     const { inserted } = await insertExpenses(deps.db, expenses);
 
-    console.log(
-      `[${new Date().toISOString()}] expense details: ${formatExpenseDetails(expenses)}`,
-    );
+    logger.info({ details: formatExpenseDetails(expenses) }, "expense details");
 
     if (inserted === 0) {
       return {

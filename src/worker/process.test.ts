@@ -19,6 +19,14 @@ vi.mock("../domains/reports/index.js", () => ({
   handleReport: vi.fn(),
 }));
 
+vi.mock("../lib/logger.js", () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 const config: Config = {
   aiGatewayApiKey: "test-gateway-key",
   llmProvider: "openai",
@@ -42,8 +50,6 @@ describe("processMessage", () => {
   beforeEach(() => {
     routeMessageMock.mockReset();
     handleExpenseMock.mockReset();
-    vi.spyOn(console, "log").mockImplementation(() => {});
-    vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
   afterEach(() => {

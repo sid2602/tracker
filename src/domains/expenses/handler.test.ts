@@ -38,6 +38,12 @@ vi.mock("./parser.js", () => ({
   ) => parseExpensesMock(configArg, text, referenceDate),
 }));
 
+vi.mock("../../lib/logger.js", () => ({
+  logger: {
+    info: vi.fn(),
+  },
+}));
+
 function createParsedResult(
   items: ExpenseResult["items"],
 ): ExpenseResult {
@@ -56,7 +62,6 @@ describe("handleExpense", () => {
     await initSchema(db);
     deps = { db, config };
     parseExpensesMock.mockReset();
-    vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
   afterEach(async () => {

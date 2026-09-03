@@ -1,4 +1,5 @@
 import { handleExpense } from "../domains/expenses/index.js";
+import { logger } from "../lib/logger.js";
 import { handleReport } from "../domains/reports/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
 import { routeMessage } from "../routing/router.js";
@@ -27,13 +28,7 @@ export async function processMessage(
 ): Promise<HandlerResult> {
   try {
     const route = await routeMessage(deps.config, context.rawText);
-    console.log(
-      `[${new Date().toISOString()}] routed intent=${route.intent}${
-        route.intent === "report"
-          ? ` period=${route.period} group_by=${route.group_by}`
-          : ""
-      }`,
-    );
+    logger.info({ route }, "routed message intent");
     const result = await dispatchMessage(deps, context, route);
 
     const finalResult: HandlerResult =
@@ -51,10 +46,7 @@ export async function processMessage(
     });
     return finalResult;
   } catch (error) {
-    console.warn(
-      `[${new Date().toISOString()}] Message processing failed`,
-      error,
-    );
+    logger.warn({ error }, "Message processing failed");
     const failure: HandlerResult = {
       kind: "failure",
       message: UNRECOGNIZED_MESSAGE,

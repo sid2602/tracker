@@ -1,4 +1,5 @@
 import type { Config } from "../config.js";
+import { logger } from "../lib/logger.js";
 
 const RECONNECT_DELAY_MS = 2_000;
 
@@ -54,7 +55,7 @@ async function readSocket(
   signal?: AbortSignal,
 ): Promise<void> {
   const url = buildReceiveWebSocketUrl(config);
-  console.log(`[${new Date().toISOString()}] signal connecting ${url}`);
+  logger.info({ url }, "signal connecting");
   const socket = new WebSocket(url);
 
   await new Promise<void>((resolve) => {
@@ -77,15 +78,13 @@ async function readSocket(
     signal?.addEventListener("abort", onAbort, { once: true });
 
     socket.addEventListener("open", () => {
-      console.log(`[${new Date().toISOString()}] signal connected`);
+      logger.info("signal connected");
     });
 
     socket.addEventListener("message", (event) => {
       const parsed = parseWebSocketPayload(event.data);
       if (parsed === null) {
-        console.warn(
-          `[${new Date().toISOString()}] signal received non-JSON payload`,
-        );
+        logger.warn("signal received non-JSON payload");
         return;
       }
 
@@ -96,17 +95,14 @@ async function readSocket(
           try {
             await onPayload(item);
           } catch (error) {
-            console.warn(
-              `[${new Date().toISOString()}] Failed to handle Signal payload`,
-              error,
-            );
+            logger.warn({ error }, "Failed to handle Signal payload");
           }
         }
       })();
     });
 
     socket.addEventListener("error", () => {
-      console.warn(`[${new Date().toISOString()}] signal websocket error`);
+      logger.warn("signal websocket error");
       try {
         socket.close();
       } catch {
@@ -116,7 +112,7 @@ async function readSocket(
     });
 
     socket.addEventListener("close", () => {
-      console.log(`[${new Date().toISOString()}] signal disconnected`);
+      logger.info("signal disconnected");
       settle();
     });
 
@@ -142,19 +138,14 @@ export async function listenForMessages(
         return;
       }
 
-      console.warn(
-        `[${new Date().toISOString()}] Signal WebSocket error`,
-        error,
-      );
+      logger.warn({ error }, "Signal WebSocket error");
     }
 
     if (options.signal?.aborted) {
       return;
     }
 
-    console.log(
-      `[${new Date().toISOString()}] signal reconnecting in ${reconnectDelayMs}ms`,
-    );
+    logger.info({ reconnectDelayMs }, "signal reconnecting");
     await delay(reconnectDelayMs, options.signal);
   }
 }

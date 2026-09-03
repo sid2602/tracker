@@ -5,6 +5,7 @@ import {
 } from "@langfuse/tracing";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 import type { Config } from "./config.js";
+import { logger } from "./lib/logger.js";
 
 type TraceMetadata = Record<string, string | number | boolean | null>;
 
@@ -38,7 +39,7 @@ export async function initTracing(config: Config): Promise<void> {
     tracingEnabled = false;
     otelSdk = null;
     spanProcessor = null;
-    console.warn("Langfuse tracing init failed", error);
+    logger.warn({ error }, "Langfuse tracing init failed");
   }
 }
 
@@ -51,7 +52,7 @@ export async function shutdownTracing(): Promise<void> {
     await spanProcessor?.forceFlush();
     await otelSdk?.shutdown();
   } catch (error) {
-    console.warn("Langfuse tracing shutdown failed", error);
+    logger.warn({ error }, "Langfuse tracing shutdown failed");
   } finally {
     tracingEnabled = false;
     otelSdk = null;
@@ -71,7 +72,7 @@ export async function withMessageTrace<T>(
     try {
       updateActiveObservation({ input });
     } catch (error) {
-      console.warn("Langfuse message input update failed", error);
+      logger.warn({ error }, "Langfuse message input update failed");
     }
     return fn();
   });
@@ -91,7 +92,7 @@ export function recordMessageTrace(update: {
       ...(update.metadata ? { metadata: update.metadata } : {}),
     });
   } catch (error) {
-    console.warn("Langfuse message trace update failed", error);
+    logger.warn({ error }, "Langfuse message trace update failed");
   }
 }
 
@@ -134,7 +135,7 @@ export async function withLlmSpan<T>(
             { asType: "generation" },
           );
         } catch (error) {
-          console.warn("Langfuse generation update failed", error);
+          logger.warn({ error }, "Langfuse generation update failed");
         }
         return value;
       } catch (error) {
@@ -155,7 +156,7 @@ export async function withLlmSpan<T>(
             { asType: "generation" },
           );
         } catch (updateError) {
-          console.warn("Langfuse generation update failed", updateError);
+          logger.warn({ error: updateError }, "Langfuse generation update failed");
         }
         throw error;
       }

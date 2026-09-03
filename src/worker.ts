@@ -1,4 +1,5 @@
 import { loadConfig } from "./config.js";
+import { logger } from "./lib/logger.js";
 import { initSchema, openDatabase } from "./db/connection.js";
 import { listenForMessages, parseEnvelope, sendMessage } from "./signal/index.js";
 import {
@@ -9,9 +10,7 @@ import {
 import { processMessage } from "./worker/dispatch.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./worker/types.js";
 
-function log(message: string): void {
-  console.log(`[${new Date().toISOString()}] ${message}`);
-}
+
 
 export async function handleIncomingPayload(
   deps: AppDeps,
@@ -22,8 +21,9 @@ export async function handleIncomingPayload(
     return;
   }
 
-  log(
-    `received from ${context.sourceAuthor}: ${JSON.stringify(context.rawText)}`,
+  logger.info(
+    { sourceAuthor: context.sourceAuthor, rawText: context.rawText },
+    "received message",
   );
 
   await withMessageTrace(
@@ -38,12 +38,9 @@ export async function handleIncomingPayload(
         }
 
         await sendMessage(deps.config, context.sourceAuthor, result.message);
-        log(`reply sent to ${context.sourceAuthor}`);
+        logger.info({ sourceAuthor: context.sourceAuthor }, "reply sent");
       } catch (error) {
-        console.warn(
-          `[${new Date().toISOString()}] Failed to process Signal message`,
-          error,
-        );
+        logger.warn({ error }, "Failed to process Signal message");
       }
     },
   );
@@ -52,13 +49,13 @@ export async function handleIncomingPayload(
 function logResult(context: MessageContext, result: HandlerResult): void {
   switch (result.kind) {
     case "silent":
-      log(`ignored: ${JSON.stringify(context.rawText)}`);
+      logger.info({ rawText: context.rawText }, "ignored");
       break;
     case "success":
-      log(`success: ${JSON.stringify(result.message)}`);
+      logger.info({ message: result.message }, "success");
       break;
     case "failure":
-      log(`failure: ${JSON.stringify(result.message)}`);
+      logger.info({ message: result.message }, "failure");
       break;
   }
 }
@@ -71,10 +68,13 @@ async function main(): Promise<void> {
   await initSchema(db);
   const deps: AppDeps = { db, config };
 
-  log(
-    `worker started db=${config.databasePath} model=${config.llmProvider}/${config.llmModel} tracing=${
-      config.langfusePublicKey && config.langfuseSecretKey ? "on" : "off"
-    }`,
+  logger.info(
+    {
+      db: config.databasePath,
+      model: `${config.llmProvider}/${config.llmModel}`,
+      tracing: config.langfusePublicKey && config.langfuseSecretKey ? "on" : "off",
+    },
+    "worker started",
   );
 
   const onShutdown = () => {
@@ -91,6 +91,6 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error: unknown) => {
-  console.error(error);
+  logger.error({ error }, "Fatal error");
   process.exitCode = 1;
 });
