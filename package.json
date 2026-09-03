@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify": "npm run typecheck && npm run test",
     "dev:parse": "tsx src/scripts/dev-parse.ts",
     "start": "tsx src/worker.ts"
   },
