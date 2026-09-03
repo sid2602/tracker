@@ -7,22 +7,13 @@ import { parseExpenses } from "./parser.js";
 import { insertExpenses, type ExpenseInput } from "./repository.js";
 import type { ExpenseResult } from "./schema.js";
 
-type HandleExpenseDeps = {
-  parse?: typeof parseExpenses;
-  getDate?: typeof getReferenceDate;
-};
-
 export async function handleExpense(
   deps: AppDeps,
   context: MessageContext,
-  handlerDeps: HandleExpenseDeps = {},
 ): Promise<HandlerResult> {
-  const parse = handlerDeps.parse ?? parseExpenses;
-  const getDate = handlerDeps.getDate ?? getReferenceDate;
-
   try {
-    const referenceDate = getDate(TIME_ZONE, deps.now?.() ?? new Date());
-    const parsed = await parse(deps.config, context.rawText, referenceDate);
+    const referenceDate = getReferenceDate(TIME_ZONE, deps.now?.() ?? new Date());
+    const parsed = await parseExpenses(deps.config, context.rawText, referenceDate);
     const expenses = mapParsedExpenses(parsed, context);
     const { inserted } = await insertExpenses(deps.db, expenses);
 
