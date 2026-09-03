@@ -1,97 +1,92 @@
-# Plan MVP: Signal Expense Tracker
+# MVP Plan: Signal Expense Tracker
 
-## Cel
+## Goal
 
-Wysylasz do siebie w Signal wiadomosc, np. `zakupy 15 zl`, `stacja benzynowa
-15 zl` albo `zrob raport wydatkow z tego miesiaca`. Aplikacja rozpoznaje typ
-notatki, zapisuje wydatek lub odpisuje raportem. Losowe notatki ignoruje.
+You send a message to yourself in Signal, e.g. `groceries 15 PLN`, `gas station 15 PLN` or `generate expense report for this month`. The application recognizes the note type, saves the expense, or replies with a report. Random notes are ignored. Input can be in any language; bot responses are in English.
 
-## Minimalna architektura
+## Minimal Architecture
 
 ```text
-Signal "Notatki do siebie"
+Signal "Note to Self"
   -> signal-cli-rest-api (linked device, MODE=json-rpc)
-  -> worker Node.js + TypeScript (long-poll /v1/receive)
-  -> AI SDK router: expense | report | ignore
+  -> Node.js + TypeScript worker (WebSocket /v1/receive)
+  -> AI SDK + Vercel AI Gateway router: expense | report | ignore
   -> switch:
-       expense -> AI SDK wydatkow -> Zod -> SQLite -> Signal: "✅ Zapisano"
-       report  -> stale SQL -> Signal: "📊 Raport"
-       ignore  -> brak akcji
+       expense -> Gateway LLM expenses -> Zod -> SQLite -> Signal: "Saved N items"
+       report  -> fixed SQL -> Signal: "📊 Report: …"
+       ignore  -> no action
 
-Worker --asynchronicznie--> Langfuse Cloud (trace LLM)
+Worker --asynchronously--> Langfuse Cloud (LLM trace + content)
 ```
 
-Docker Compose uruchamia tylko dwa kontenery:
+Docker Compose runs only two containers:
 
-1. `signal-cli-rest-api` jako sparowane urzadzenie Signal.
-2. Worker Node.js z logika aplikacji.
+1. `signal-cli-rest-api` as a linked Signal device.
+2. Node.js worker with application logic.
 
-Kontenery maja `restart: unless-stopped` i trwale wolumeny na konfiguracje
-Signal oraz plik SQLite. Nie wystawiaj portow publicznie. Do pierwszego
-sparowania QR wystarczy tymczasowe zbindowanie API do `127.0.0.1` i tunel SSH.
-Langfuse Cloud nie jest kolejnym kontenerem na Raspberry Pi.
+Containers have `restart: unless-stopped` and persistent volumes for Signal configuration and SQLite database file. Do not expose ports publicly. For the initial QR pairing, binding the API to `127.0.0.1:8080` and using an SSH tunnel is sufficient. The worker in Compose connects internally as `http://signal-cli-rest-api:8080`. Langfuse Cloud is not an additional container on the Raspberry Pi.
 
 ## Signal
 
-`signal-cli-rest-api` nie ma potwierdzonego webhooka dla tego przeplywu.
-Worker wykonuje long-polling:
+In `MODE=json-rpc`, reception happens via WebSocket (HTTP long-polling does not work properly in this mode):
 
 ```text
-GET /v1/receive/{numer}?timeout=N
+ws://{host}/v1/receive/{number}
 ```
 
-Ustaw `MODE=json-rpc`, aby `signal-cli` dzialal jako daemon. Nie ustawiaj
-`AUTO_RECEIVE_SCHEDULE`, poniewaz drugi odbior moze przejac wiadomosci przed
-workerem.
+Set `MODE=json-rpc` so that `signal-cli` runs as a daemon. Do not set `AUTO_RECEIVE_SCHEDULE`, because a second receiver might consume messages before the worker.
 
-Kazda odpowiedz bota zaczyna sie od `✅`. Worker ignoruje taki tekst przed
-wywolaniem LLM, wiec ewentualne echo wlasnego potwierdzenia nie tworzy petli.
+Echoes of bot responses (e.g. `Saved …`, `📊 Report …`) reach the LLM router and must be classified as `ignore`. There is no separate prefix filter prior to the LLM. Sending responses: `POST /v2/send`.
 
-## Aplikacja TypeScript
+## TypeScript Application
 
-Bez Expressa, Fastify, n8n i dodatkowego serwera HTTP. Wystarczy jeden proces:
+No Express, Fastify, n8n, or additional HTTP server. A single process is sufficient:
 
-1. Odbiera wiadomosc z Signal.
-2. Ignoruje techniczne potwierdzenia.
-3. Pyta router LLM tylko o typ notatki: `expense`, `report` albo `ignore`.
-4. Przekazuje cala wiadomosc do handlera wybranego przez `switch`.
-5. Handler `expense` wywoluje szczegolowy LLM, waliduje Zod i zapisuje
-   pozycje w jednej transakcji SQLite.
-6. Handler `report` wykonuje stale, parametryzowane zapytanie SQLite i wysyla
-   wynik do Signal.
-7. Handler `ignore` konczy bez akcji i odpowiedzi.
-8. Asynchronicznie zapisuje trace LLM w Langfuse.
+1. Receives message from Signal (WebSocket).
+2. Skips events without content (typing, receipts).
+3. Queries LLM router solely for note type: `expense`, `report`, or `ignore`.
+4. Dispatches the full message to the handler selected by `switch`.
+5. `expense` handler calls the detailed LLM, validates with Zod, and persists items in a single SQLite transaction.
+6. `report` handler executes a fixed, parameterized SQLite query and sends the result to Signal.
+7. `ignore` handler exits with no action and no response.
+8. Asynchronously logs LLM trace in Langfuse (when configured).
 
-Kazde wywolanie LLM ma jeden retry z tym samym providerem i modelem. Jezeli
-router lub handler wydatku nadal nie zwroci poprawnych danych, nie wykonuj
-akcji i odpisz, ze wiadomosc nie zostala rozpoznana. Nie zmieniaj automatycznie
-GPT na Claude ani odwrotnie.
+Each LLM call has one retry using the same provider and model. If the router or expense handler still fails to return valid data, take no action and reply with `Could not recognize that message.`. Do not automatically switch GPT to Claude or vice versa.
 
-## Intencje i dispatch
+Code structure (domains):
 
-Router ma maly, zamkniety schemat Zod:
+```text
+src/
+  config.ts
+  worker.ts
+  worker/dispatch.ts
+  signal/client.ts, envelope.ts
+  llm/provider.ts, generate.ts
+  routing/
+  domains/expenses/
+  domains/reports/
+  db/connection.ts
+  tracing.ts
+  lib/
+```
+
+## Intents and Dispatch
+
+The router uses a small, closed Zod schema (for Gateway as a flat object with nullable `period` / `group_by`, then normalized into the result type):
 
 ```text
 expense | report | ignore
 ```
 
-Router nie przypisuje kategorii ani nie wykonuje SQL. Tylko handler `expense`
-dostaje liste kategorii, date i szczegolowy schemat wydatku. Pozwala to dodac
-pozniej niezalezny typ notatki bez powiekszania promptu od wydatkow.
+The router does not assign categories nor execute SQL. Only the `expense` handler receives the category list, date, and detailed expense schema. This allows adding an independent note type later without enlarging the expense prompt.
 
-Handler `report` przyjmuje tylko zwalidowane parametry, np.
-`period: this_month | last_month` i `group_by: total | category`. Sam liczy
-granice dat w `Europe/Warsaw` i wykonuje znane zapytanie SQLite. LLM nigdy nie
-zwraca SQL, nazwy kolumn ani dowolnego filtra.
+The `report` handler accepts only validated parameters, e.g. `period: this_month | last_month` and `group_by: total | category`. It computes date boundaries in `Europe/Warsaw` and executes predefined SQLite queries. The LLM never returns raw SQL, column names, or arbitrary filters.
 
-`ignore` jest poprawna, jawna decyzja routera dla notatki bez obslugiwanej
-akcji. Nie traktuj bledu Zod jako `ignore`.
+`ignore` is a valid, explicit router decision for a note with no supported action. Do not treat a Zod validation error as `ignore`.
 
-## Model danych
+## Data Model
 
-Uzyj `better-sqlite3`. Kwoty trzymaj w groszach jako `INTEGER`, nie jako
-`REAL`. Walute trzymaj jako trzyliterowy kod ISO 4217. Raport zawsze grupuje
-sumy po `currency`; nie dodawaj razem kwot roznych walut.
+Use `better-sqlite3`. Store amounts in cents/groszy as `INTEGER`, not as `REAL`. Store currency as a 3-letter ISO 4217 code. Reports always group totals by `currency`; do not sum different currencies together.
 
 ```sql
 CREATE TABLE expenses (
@@ -110,76 +105,62 @@ CREATE TABLE expenses (
 );
 ```
 
-Wstawiaj rekordy przez `INSERT OR IGNORE`. Klucz unikatowy w pelni chroni
-pojedynczy wydatek przed podwojnym zapisem po restarcie lub ponownej dostawie,
-a `item_index` pozwala zapisac kilka wydatkow z jednej wiadomosci. Dla
-wielopozycyjnej wiadomosci ponowne parsowanie moze zmienic liczbe lub kolejnosc
-pozycji; pelna gwarancja dla tego przypadku przychodzi z zamrozonym
-`parsed_json` w Fazie 1.
+Insert records via `INSERT OR IGNORE`. The unique key fully protects a single expense from duplicate writes upon restart or redelivery, and `item_index` allows storing multiple expenses from a single message. For multi-item messages, re-parsing might alter the number or order of items; the complete guarantee for this scenario comes with frozen `parsed_json` in Phase 1.
 
-Najpierw pobierz i zwaliduj cala liste wydatkow, a dopiero potem otworz
-transakcje zapisu.
+First fetch and validate the entire list of expenses, and only then open a write transaction.
 
-## Kategorie i daty
+## Categories, Dates, and Language
 
-Na start trzymaj w kodzie mala, zamknieta liste angielskich identyfikatorow.
-Tylko `note` i `raw_text` moga zachowac polska tresc:
+For the MVP, keep a small, closed list of English identifiers in code:
 
 ```text
 groceries, food, fuel, transport, home, bills,
 health, entertainment, other
 ```
 
-Do szczegolowego promptu wydatkow przekazuj biezaca date i strefe
-`Europe/Warsaw`. Brak daty oznacza dzisiaj; obsluguj np. `wczoraj` i date
-podana w tresci.
+Pass the current date and `Europe/Warsaw` time zone into the detailed expense prompt. Absence of a date means today; support relative dates (e.g. `yesterday` / `wczoraj`) and dates specified in the text.
 
-## Wymienny LLM
+`note` and `raw_text` preserve the user's original message language. Signal responses are fixed in English, e.g.:
 
-Uzyj Vercel AI SDK z natywnymi providerami:
+```text
+Saved 1 item / Saved N items
+Message already saved
+Could not recognize that message.
+📊 Report: this month / last month
+```
+
+## Swappable LLM
+
+Use Vercel AI SDK with Vercel AI Gateway (`createGateway`):
 
 ```text
 ai
-@ai-sdk/openai
-@ai-sdk/anthropic
 ```
 
-Jedna funkcja wybiera provider na podstawie konfiguracji. Router i handler
-wydatkow maja osobne, male schematy Zod dla `generateObject`, ale uzywaja tej
-samej konfiguracji modelu:
+A single function builds the model as `{provider}/{model}` based on configuration. The router and expense handler have separate, small Zod schemas for `generateObject`, but share the same model configuration:
 
 ```text
+AI_GATEWAY_API_KEY
 LLM_PROVIDER=openai | anthropic
 LLM_MODEL
-OPENAI_API_KEY
-ANTHROPIC_API_KEY
 ```
 
-Pozwala to recznie zmienic GPT na Claude bez zmiany logiki aplikacji. Kazdy
-wynik routera albo handlera musi przejsc walidacje Zod przed wykonaniem akcji.
+This allows manually switching GPT to Claude without altering application logic (via Gateway). Every router or handler result must pass Zod validation before executing an action.
 
-Zmiana modelu nie moze zagwarantowac identycznej jakosci rozumienia tekstu.
-Przed zmiana uruchom kilka prawdziwych przykladow
-`wiadomosc -> oczekiwany JSON`; to wystarczy jako maly test regresji, bez
-budowania frameworka ewaluacyjnego.
+Switching models cannot guarantee identical language understanding quality. Before switching, run a few real-world examples of `message -> expected JSON`; this suffices as a minimal regression test without building an evaluation framework.
 
 ## Langfuse
 
-Langfuse sluzy w MVP tylko do obserwowalnosci LLM: czasu odpowiedzi, modelu,
-liczby tokenow i wyniku parsowania. Kazda wiadomosc Signal tworzy jeden trace:
-router jest pierwsza generacja, a handler wydatku opcjonalna druga generacja.
-Zapisuj:
+In the MVP, Langfuse is used for LLM observability. Each Signal message creates a single trace: the router is the first generation, and the expense handler is the optional second. Record metadata:
 
 ```text
-model, provider, czas odpowiedzi, tokeny, wynik walidacji,
-liczbe zapisanych wydatkow i kod bledu
+model, provider, response time, tokens, validation result,
+count of saved expenses, and error code
 ```
 
-Domyslnie nie wysylaj do Langfuse tresci wiadomosci, promptu ani opisu
-wydatku. To dane finansowe; metadane wystarcza do wykrycia wolnego, drogiego
-lub zawodnego modelu. Pelne tresci wlaczaj tylko swiadomie podczas diagnostyki.
+as well as diagnostics content: prompt and LLM response, Signal message text, and handler result. Absence of API keys disables tracing.
 
-Dodaj do workera aktualny SDK JS/TS Langfuse:
+Add the modern Langfuse JS/TS SDK to the worker:
 
 ```text
 @langfuse/tracing
@@ -187,7 +168,7 @@ Dodaj do workera aktualny SDK JS/TS Langfuse:
 @opentelemetry/sdk-node
 ```
 
-Konfiguracja wymaga tylko:
+Configuration:
 
 ```text
 LANGFUSE_PUBLIC_KEY
@@ -195,46 +176,27 @@ LANGFUSE_SECRET_KEY
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-Brak kluczy wylacza tracing; zapis wydatku nie moze od nich zalezec. SDK
-eksportuje trace asynchronicznie, wiec awaria Langfuse nie blokuje Signal,
-LLM ani SQLite. Taki blad zapisuj jako `console.warn`, nie ukrywaj go pustym
-`catch`.
+Missing keys disable tracing; expense saving must not depend on them. The SDK exports traces asynchronously, so Langfuse outages do not block Signal, the LLM, or SQLite. Log such errors with `console.warn`; do not hide them in an empty `catch`.
 
-Nie uzywaj teraz Langfuse do dynamicznego zarzadzania promptami, datasetow ani
-automatycznych evaluatorow. Prompt zostaje wersjonowany razem z kodem, a kilka
-przykladow regresji pozostaje wystarczajacym sprawdzeniem przed zmiana modelu.
+Do not use Langfuse for dynamic prompt management, datasets, or automated evaluators at this stage. Prompts remain versioned in code.
 
-Zrodla: [AI SDK providers](https://ai-sdk.dev/docs/foundations/providers-and-models),
-[Langfuse JS/TS SDK v5](https://langfuse.com/docs/observability/sdk/overview),
-[Langfuse self-hosting v4](https://langfuse.com/self-hosting) i
-[Anthropic OpenAI SDK compatibility](https://platform.claude.com/docs/en/cli-sdks-libraries/libraries/openai-sdk).
+Sources: [AI SDK Gateway](https://ai-sdk.dev/providers/ai-sdk-providers/ai-gateway), [Langfuse JS/TS SDK v5](https://langfuse.com/docs/observability/sdk/overview).
 
-## Raspberry Pi i prywatnosc
+## Raspberry Pi and Privacy
 
-Raspberry Pi 4 lub 5 z co najmniej 2 GB RAM obsluzy ten wariant, gdy model
-dziala przez API. Nie uruchamiaj lokalnego modelu na tym samym Pi w MVP:
-bedzie wolniejszy i zwykle mniej dokladny.
+A Raspberry Pi 4 or 5 with at least 2 GB RAM will handle this setup when the model runs via API. Do not run a local LLM on the same Pi in MVP: it will be slower and typically less accurate.
 
-Signal szyfruje transport, ale zewnetrzny dostawca LLM otrzyma tresc wydatku.
-Wybierz lokalny model tylko wtedy, gdy ta cena prywatnosci jest wazniejsza od
-jakosci rozpoznawania. Langfuse Cloud dostaje domyslnie tylko metadane trace,
-nie tekst wiadomosci ani odpowiedz LLM.
+Signal encrypts transport, but the external LLM provider (via Gateway) and Langfuse Cloud receive expense content / prompts when tracing is enabled. Choose a local model or disable Langfuse when privacy takes precedence over diagnostics.
 
-## Faza 1 po MVP: niezawodne przetwarzanie
+## Phase 1 after MVP: Reliable Processing
 
-Cel: po trwalym odebraniu komendy przez aplikacje ma ona zostac przetworzona az
-do sukcesu technicznego, bez podwojnego zapisu wydatku po crashu, restarcie lub
-ponownej dostawie z Signal.
+Goal: Once a command is durably received by the application, it must be processed until technical success without duplicate expense writes after crashes, restarts, or Signal redeliveries.
 
-Nie da sie zagwarantowac doslownie "exactly once" od telefonu do Signal, LLM i
-SQLite. `signal-cli-rest-api` nie dokumentuje ACK/NACK ani redelivery dla
-`/v1/receive`. Po udanym zapisie do lokalnego inboxa da sie jednak osiagnac
-at-least-once przetwarzanie oraz effectively-once zapis wydatku.
+Literal "exactly once" delivery cannot be guaranteed from phone to Signal, LLM, and SQLite. `signal-cli-rest-api` does not document ACK/NACK or redelivery for `/v1/receive`. However, once saved to a local durable inbox, at-least-once processing and effectively-once expense persistence are achievable.
 
-### Durable inbox
+### Durable Inbox
 
-Dodaj tabele `inbox`. Natychmiast po odebraniu eventu Signal zapisz surowy
-payload do SQLite, zanim uruchomisz LLM, parsowanie lub wysylke odpowiedzi.
+Add an `inbox` table. Immediately upon receiving a Signal event, persist the raw payload to SQLite before triggering LLM, parsing, or sending responses.
 
 ```text
 message_key UNIQUE
@@ -249,97 +211,55 @@ lease_token
 received_at
 ```
 
-`message_key` buduj z niezmiennych pol eventu Signal, sprawdzonych na zywych
-payloadach, np. konto + nadawca + urzadzenie nadawcy + timestamp. Nie deduplikuj
-po tresci: dwa identyczne zakupy moga byc prawidlowe.
+Build `message_key` from immutable Signal event fields verified against live payloads, e.g. account + sender + sender device + timestamp. Do not deduplicate by content: two identical purchases may be valid.
 
-Istniejacy klucz `UNIQUE(source_author, source_timestamp, item_index)` w
-`expenses` zostaje zabezpieczeniem przed podwojnym zapisem jednej pozycji.
+The existing `UNIQUE(source_author, source_timestamp, item_index)` constraint in `expenses` remains a safeguard against duplicate item writes.
 
-### Przeplyw i transakcje
+### Flow and Transactions
 
-1. Odbior Signal zapisuje event jako `pending` przez `INSERT OR IGNORE`.
-2. Worker atomowo przejmuje gotowy wpis lease'em i wywoluje router.
-3. `ignore` ustawia stan `ignored`; `expense` wywoluje szczegolowy LLM, a
-   `report` przygotowuje parametry raportu.
-4. Po poprawnej walidacji Zod zapisuje koncowy `parsed_json` i status
-   `analyzed`. Blad merytoryczny zapisuje w `parsed_json`
-   `{"outcome":"needs_attention","reason":"..."}`, zapisuje prosbe o
-   poprawienie wiadomosci w `response_text` i ustawia status `saved`, bez
-   wykonania niejednoznacznej akcji.
-5. Osobna transakcja zapisuje wydatki albo wynik raportu w `response_text` i
-   ustawia status `saved`.
-6. Dla `saved` worker wysyla zapisana odpowiedz Signal i ustawia `confirmed`.
+1. Signal receiver records the event as `pending` via `INSERT OR IGNORE`.
+2. Worker atomically leases an available entry and invokes the router.
+3. `ignore` sets status to `ignored`; `expense` invokes the detailed LLM, and `report` prepares report parameters.
+4. Upon successful Zod validation, save the final `parsed_json` and status `analyzed`. Semantic errors store `{"outcome":"needs_attention","reason":"..."}` in `parsed_json`, record a clarification request in `response_text`, and set status to `saved` without taking ambiguous actions.
+5. A separate transaction writes expenses or report results into `response_text` and sets status to `saved`.
+6. For `saved`, the worker sends the stored Signal response and updates status to `confirmed`.
 
-Zapis `parsed_json` zamraza zwalidowana decyzje LLM. Crash po udanej analizie
-nie wywola modelu ponownie i nie zmieni wyniku, nawet jezeli pozniej zmienisz
-GPT na Claude. `response_text` zapewnia, ze retry potwierdzenia raportu nie
-policzy go ponownie na zmienionych danych.
+Saving `parsed_json` freezes the validated LLM decision. A crash after successful analysis will not re-invoke the model or alter the outcome, even if GPT is subsequently switched to Claude. `response_text` ensures that a retry of report confirmation will not recompute against modified data.
 
-Status `saved` jest lekkim transactional outboxem: w tej samej transakcji co
-wykonana akcja zapisana jest intencja wyslania jednej odpowiedzi. Osobna tabela
-`outbox` nie jest potrzebna, dopoki jedynym efektem ubocznym jest odpowiedz w
-tym samym czacie Signal.
+The `saved` status acts as a lightweight transactional outbox: within the same transaction as the performed action, the intent to send a single response is recorded. A separate `outbox` table is unnecessary as long as the sole side effect is a reply in the same Signal chat.
 
-### Retry i recovery
+### Retry and Recovery
 
-Uruchom `recoverDue()` przy starcie oraz timerem co 30 sekund. Nie uruchamiaj
-recovery tylko przed long-pollem, bo subskrypcja Signal moze czekac bez konca
-na kolejna wiadomosc.
+Run `recoverDue()` at startup and on a 30-second timer. Do not run recovery only prior to Signal subscription, as the WebSocket may wait indefinitely for the next message.
 
-Blad techniczny, np. timeout, brak sieci, 429, 5xx lub chwilowa blokada SQLite,
-zostawia wpis do ponowienia. Zwielksz `attempts`, ustaw `next_attempt_at` z
-wykladniczym backoffem ograniczonym do maksymalnego odstepu i probuj dalej bez
-limitu prob.
+Technical errors (e.g. timeout, network loss, 429, 5xx, or temporary SQLite lock) leave the entry for retry. Increment `attempts`, set `next_attempt_at` with exponential backoff capped at a maximum interval, and continue retrying without an attempt limit.
 
-Blad merytoryczny po jednym retry tego samego modelu nie wykonuje
-niejednoznacznej akcji automatycznie. Zapisana odpowiedz przechodzi przez
-`saved -> confirmed` tak jak kazda inna odpowiedz Signal.
+A semantic error after one retry of the same model does not perform ambiguous actions automatically. The recorded response transitions through `saved -> confirmed` like any other Signal response.
 
-### Lease i stale writers
+### Leases and Stale Writers
 
-Przed praca nad wierszem worker atomowo ustawia `lease_until` oraz losowy
-`lease_token` przez natywne `crypto.randomUUID()`. Kazda pozniejsza zmiana
-statusu musi warunkowac zapis tym samym tokenem.
+Before working on a row, the worker atomically sets `lease_until` and a random `lease_token` via native `crypto.randomUUID()`. Every subsequent status update must condition the write on the same token.
 
 ```text
 UPDATE inbox ... WHERE id = ? AND lease_token = ?
 ```
 
-Po wygasnieciu lease recovery przejmie wpis. Token blokuje spoznione wywolanie
-LLM przed nadpisaniem wyniku nowszego retry. Ustaw timeout LLM krotszy niz
-lease, np. timeout 30 s i lease 120 s.
+Once a lease expires, recovery can take over the entry. The token prevents a delayed LLM invocation from overwriting the result of a newer retry. Set the LLM timeout shorter than the lease duration (e.g. 30s timeout and 120s lease).
 
-### Granice gwarancji
+### Boundary Guarantees
 
-- Wiadomosc zapisana w `inbox` bedzie ponawiana po kazdej awarii technicznej az
-  do przetworzenia.
-- Zapis wydatkow jest effectively-once: transakcja SQLite i unikatowy klucz
-  chronia przed duplikatem.
-- Potwierdzenie Signal jest at-least-once: crash po udanej wysylce, a przed
-  ustawieniem `confirmed`, moze wyslac drugie, nieszkodliwe potwierdzenie.
-- Crash pomiedzy eventem z Signal a pierwszym commitem `inbox` pozostaje luka,
-  ktorej nie da sie formalnie zamknac bez udokumentowanego ACK po stronie
-  Signal. Durable inbox minimalizuje ja do jednego krotkiego zapisu.
+- Messages stored in `inbox` will be retried across technical failures until processed.
+- Expense writes are effectively-once: SQLite transactions and unique keys prevent duplicates.
+- Signal confirmation is at-least-once: a crash after successful transmission but before updating to `confirmed` may send a second, harmless confirmation.
+- A crash between the Signal event arrival and the initial `inbox` commit remains a window that cannot be formally closed without documented ACK from Signal. The durable inbox minimizes it to a single brief write.
 
-### Trwalosc Raspberry Pi
+### Raspberry Pi Durability
 
-Przenies wolumen SQLite na USB SSD, nie trzymaj jedynej kopii na karcie SD.
-Uzyj transakcji SQLite, `journal_mode=WAL` i `synchronous=FULL`. Dodaj UPS oraz
-szyfrowany backup na drugi nosnik lub przez `rclone`; backup wykonuj przez
-mechanizm backupu SQLite, nie przez zwykle kopiowanie aktywnego pliku `.db`.
+Move the SQLite volume to a USB SSD; do not keep the sole copy on an SD card. Use SQLite transactions, `journal_mode=WAL`, and `synchronous=FULL`. Add a UPS and encrypted backups to secondary media or via `rclone`; perform backups using SQLite's backup API rather than simply copying the active `.db` file.
 
-## Dalsze rozszerzenia
+## Further Extensions
 
-W Fazie 1 zapisuj tez jawne decyzje `ignore` w `inbox`, aby moc sprawdzic, czy
-router systematycznie nie ignoruje prawdziwych wydatkow. Potem dodaj eksport
-CSV, obsluge glosu lub panel WWW, gdy beda potrzebne. Samodzielny Langfuse
-rozwaz dopiero na osobnej maszynie:
-wymaga Web, Worker, PostgreSQL, Redis/Valkey, ClickHouse i storage S3, wiec nie
-jest minimalnym dodatkiem do tego Raspberry Pi.
+In Phase 1, also record explicit `ignore` decisions in `inbox` to verify whether the router is systematically ignoring real expenses. Later, add CSV export, voice support, or a web dashboard as needed. Only consider self-hosted Langfuse on a separate machine:
+it requires Web, Worker, PostgreSQL, Redis/Valkey, ClickHouse, and S3 storage, making it unsuitable as a minimal addition to this Raspberry Pi.
 
-Nie dodawaj teraz Python/FastAPI, n8n, Google Sheets, osobnego numeru Signal,
-Whisper, panelu do zarzadzania kategoriami ani self-hosted Langfuse na tym samym
-Raspberry Pi. Nie dodawaj tez OpenRouter, LiteLLM, wlasnych adapterow providerow
-ani Anthropic przez OpenAI-compatibility.
-
+Do not add Python/FastAPI, n8n, Google Sheets, a separate Signal number, Whisper, a category management UI, or self-hosted Langfuse on the same Raspberry Pi right now. Also, do not introduce OpenRouter, LiteLLM, or custom provider adapters alongside Gateway.

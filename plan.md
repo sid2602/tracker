@@ -1,128 +1,82 @@
-# Etapy implementacji MVP: Signal Expense Tracker
+# Implementation Phases: Signal Expense Tracker MVP
 
-Kolejnosc wynika z zaleznosci i ryzyka. Kazda faza konczy sie sprawdzeniem
-dzialajacego fragmentu, zanim powstanie nastepna.
+The sequence is based on dependencies and risks. Each phase concludes with verifying a working increment before moving to the next.
 
-## Zakres MVP
+## MVP Scope
 
-- Jedna rozmowa "Notatki do siebie" w Signal.
-- Wiadomosci sa klasyfikowane przez LLM jako `expense`, `report` albo
-  `ignore`; dotyczy to takze echa odpowiedzi bota, ktore router rozpoznaje z
-  tresci jako `ignore`.
-- Kategorie i identyfikatory kodowe sa po angielsku. Polski pozostaje w
-  `note`, `raw_text` i odpowiedziach Signal.
-- Trwaly `inbox`, lease'y i recovery sa poza MVP; to osobna Faza 1 po MVP.
+- Single "Note to Self" conversation in Signal.
+- Messages are classified by LLM as `expense`, `report`, or `ignore`; this also applies to bot response echoes, which the router identifies from content as `ignore` (without prefix filters).
+- Categories and code identifiers are in English. Input can be in any language; `note` and `raw_text` preserve the message language. Signal responses are in English (fixed templates).
+- LLM via Vercel AI Gateway (`AI_GATEWAY_API_KEY`), not via native `@ai-sdk/openai` / `@ai-sdk/anthropic` packages.
+- Signal message reception in `MODE=json-rpc` via WebSocket `ws://…/v1/receive/{number}` (not HTTP long-polling).
+- Durable `inbox`, leases, and recovery are out of scope for MVP; they belong to Phase 1 post-MVP.
 
-## Etap 0: sprawdzenie integracji Signal
+## Phase 0: Signal Integration Verification
 
-- [ ] Task: Zweryfikowac polaczone urzadzenie i odbior wiadomosci.
-  - Acceptance: Sparowane urzadzenie w `MODE=json-rpc` odbiera testowa
-    wiadomosc wyslana do siebie przez `GET /v1/receive/{number}?timeout=N`.
-    Jest znany rzeczywisty payload z `source_author` i `source_timestamp`.
-    `AUTO_RECEIVE_SCHEDULE` jest wylaczone.
-  - Verify: Recznie wyslac `test 1 PLN`, odebrac payload, wyslac odpowiedz i
-    sprawdzic, czy jej echo trafia do odbioru. Nie zapisywac prawdziwych danych
-    finansowych ani numeru telefonu w fixture.
-  - Files: Brak trwalych plikow; tymczasowy kontener i komendy.
-  - Depends on: Brak.
+- [x] Task: Verify linked device and message reception.
+  - Acceptance: Linked device in `MODE=json-rpc` receives a test message sent to self via WebSocket `ws://…/v1/receive/{number}`. Actual payload structure with `source` / `sourceNumber` and `timestamp` is verified. `AUTO_RECEIVE_SCHEDULE` is disabled.
+  - Verify: Manually send a test message, receive payload, send reply, and verify that its echo is received. Do not commit real financial data or phone numbers into fixtures.
+  - Files: No persistent files; temporary container and commands.
+  - Depends on: None.
 
-## Etap 1: lokalny szkielet i SQLite
+## Phase 1: Local Skeleton and SQLite
 
-- [ ] Task: Utworzyc minimalny projekt TypeScript z konfiguracja.
-  - Acceptance: `package.json`, TypeScript i `.env.example` definiuja tylko
-    wymagane zaleznosci, `LLM_PROVIDER`, `LLM_MODEL` oraz klucze providerow.
-    Brakujacy wymagany klucz zatrzymuje start z czytelnym bledem.
+- [x] Task: Create minimal TypeScript project with configuration.
+  - Acceptance: `package.json`, TypeScript, and `.env.example` define required dependencies, `AI_GATEWAY_API_KEY`, `LLM_PROVIDER`, `LLM_MODEL`, `SIGNAL_API_URL`, `SIGNAL_PHONE_NUMBER`. Missing required keys halt startup with a clear error message.
   - Verify: `npm run typecheck`.
   - Files: `package.json`, `tsconfig.json`, `.env.example`, `src/config.ts`.
-  - Depends on: Etap 0.
+  - Depends on: Phase 0.
 
-- [ ] Task: Dodac lokalna baze wydatkow.
-  - Acceptance: `better-sqlite3` tworzy tabele `expenses` z planowanym
-    schematem, kwoty sa `INTEGER` w groszach, a zapis uzywa transakcji i
-    `INSERT OR IGNORE`.
-  - Verify: `npm test` obejmuje zapis, ponowny zapis pojedynczej wiadomosci i
-    zachowanie kwoty w groszach.
-  - Files: `src/db.ts`, `src/db.test.ts`.
-  - Depends on: Konfiguracja projektu.
+- [x] Task: Add local expenses database.
+  - Acceptance: `better-sqlite3` creates `expenses` table with planned schema, amounts are `INTEGER` in cents/groszy, and persistence uses transactions with `INSERT OR IGNORE`.
+  - Verify: `npm test` covers insert, re-insert of a single message, and preserving amounts in cents/groszy.
+  - Files: `src/db/connection.ts`, `src/domains/expenses/repository.ts`, `src/domains/expenses/repository.test.ts`.
+  - Depends on: Project configuration.
 
-## Etap 2: rozpoznanie i zapis wydatku
+## Phase 2: Expense Recognition and Persistence
 
-- [ ] Task: Zaimplementowac wybor modelu oraz schematy Zod.
-  - Acceptance: Jedna funkcja wybiera natywnego providera OpenAI albo
-    Anthropic. Router zwraca tylko `expense`, `report` lub `ignore`; osobny
-    schemat wydatku uzywa tylko kategorii `groceries`, `food`, `fuel`,
-    `transport`, `home`, `bills`, `health`, `entertainment`, `other`.
-    Kazde wywolanie LLM ponawia sie raz z tym samym providerem i modelem.
-  - Verify: `npm test` sprawdza odrzucenie niepoprawnej intencji i wydatku
-    poza schematem oraz jeden retry po niepoprawnej odpowiedzi LLM, a
-    `npm run typecheck` przechodzi.
-  - Files: `src/llm.ts`, `src/llm.test.ts`, `src/schemas.ts`,
-    `src/schemas.test.ts`.
-  - Depends on: Etap 1.
+- [x] Task: Implement model selection and Zod schemas.
+  - Acceptance: A single function selects the model via Vercel AI Gateway (`openai/{model}` or `anthropic/{model}`). Router returns only `expense`, `report`, or `ignore`; separate expense schema uses only categories `groceries`, `food`, `fuel`, `transport`, `home`, `bills`, `health`, `entertainment`, `other`. Each LLM call retries once with the same provider and model.
+  - Verify: `npm test` verifies rejection of invalid intent and out-of-schema expense as well as one retry on invalid LLM response; `npm run typecheck` passes.
+  - Files: `src/llm/provider.ts`, `src/llm/generate.ts`, `src/routing/schema.ts`, `src/domains/expenses/schema.ts` (+ tests).
+  - Depends on: Phase 1.
 
-- [ ] Task: Zapisac poprawnie rozpoznany wydatek.
-  - Acceptance: Handler przekazuje do LLM date i `Europe/Warsaw`, waliduje
-    cala liste przed transakcja, zapisuje `note` oraz `raw_text`, a po jednym
-    nieudanym retry nie wykonuje zapisu.
-  - Verify: `npm test` sprawdza transakcyjny zapis wielu pozycji; recznie
-    uruchomic po jednym prawdziwym przykladzie dla zakupu, paliwa i daty
-    wzglednej.
-  - Files: `src/expenses.ts`, `src/expenses.test.ts`.
-  - Depends on: Schematy Zod.
+- [x] Task: Save correctly recognized expense.
+  - Acceptance: Handler passes date and `Europe/Warsaw` to LLM, validates entire list before transaction, saves `note` and `raw_text`, and avoids write after one failed retry. Signal responses: `Saved N items` / `Message already saved`.
+  - Verify: `npm test` checks transactional write of multiple items; manually test real examples for purchase, fuel, and relative dates.
+  - Files: `src/domains/expenses/handler.ts`, `src/domains/expenses/parser.ts`, `src/domains/expenses/handler.test.ts`.
+  - Depends on: Zod schemas.
 
-## Etap 3: raport i worker Signal
+## Phase 3: Report and Signal Worker
 
-- [ ] Task: Dodac raport oparty wylacznie na stalych zapytaniach SQLite.
-  - Acceptance: Handler przyjmuje tylko zwalidowane `period` i `group_by`,
-    liczy granice w `Europe/Warsaw`, uzywa parametryzowanego SQL i zawsze
-    grupuje wynik po `currency`.
-  - Verify: `npm test` sprawdza `this_month`, `last_month`, grupowanie
-    kategorii oraz osobne sumy PLN i EUR.
-  - Files: `src/report.ts`, `src/report.test.ts`.
-  - Depends on: Etap 1.
+- [x] Task: Add report based exclusively on fixed SQLite queries.
+  - Acceptance: Handler accepts only validated `period` and `group_by`, computes boundaries in `Europe/Warsaw`, uses parameterized SQL, and always groups output by `currency`. Response format in EN (`📊 Report: …`).
+  - Verify: `npm test` verifies `this_month`, `last_month`, category grouping, and separate PLN and EUR sums.
+  - Files: `src/lib/periods.ts`, `src/domains/reports/queries.ts`, `src/domains/reports/format.ts`, `src/domains/reports/handler.ts` (+ tests).
+  - Depends on: Phase 1.
 
-- [ ] Task: Polaczyc worker z Signal.
-  - Acceptance: Jeden proces long-polluje Signal, przekazuje tresc do routera,
-    przez `switch` zapisuje wydatek albo wysyla raport, a `ignore` nie robi
-    nic. Echo potwierdzenia lub raportu trafia do routera i konczy jako
-    `ignore`, bez filtra prefiksow. Po nieudanej walidacji routera albo
-    handlera, po jednym retry, worker nie wykonuje akcji i odpisuje, ze
-    wiadomosc nie zostala rozpoznana; nie traktuje tego jako `ignore`.
-  - Verify: Recznie wyslac kolejno wydatek, komende raportu i losowa notatke;
-    potwierdzic jeden zapis, raport z poprawna suma oraz brak odpowiedzi dla
-    notatki i echa odpowiedzi bota. Zasymulowac odpowiedz LLM niezgodna ze
-    schematem i potwierdzic brak zapisu oraz odpowiedz o nierozpoznanej
-    wiadomosci.
-  - Files: `src/signal.ts`, `src/worker.ts`.
-  - Depends on: Etap 0, Etap 2 i raport.
+- [x] Task: Connect worker to Signal.
+  - Acceptance: Single process subscribes to Signal via WebSocket, routes content to router, uses `switch` to save expense or send report, and `ignore` takes no action. Confirmation or report echo reaches router and resolves to `ignore` without prefix filtering. After failed router or handler validation and one retry, worker performs no action and replies with `Could not recognize that message.`; does not treat this as `ignore`.
+  - Verify: Manually send in sequence: an expense, a report command, and a random note; confirm single insert, report with correct total, and no reply for note or bot echo. Simulate LLM response violating schema and confirm no insert plus unrecognized message reply.
+  - Files: `src/signal/client.ts`, `src/signal/envelope.ts`, `src/worker.ts`, `src/worker/dispatch.ts`.
+  - Depends on: Phase 0, Phase 2, and report.
 
-## Etap 4: wdrozenie i obserwowalnosc
+## Phase 4: Deployment and Observability
 
-- [ ] Task: Spakowac dwa kontenery dla Raspberry Pi.
-  - Acceptance: Docker Compose uruchamia tylko `signal-cli-rest-api` i
-    worker, oba z `restart: unless-stopped` oraz wolumenami Signal i SQLite.
-    Nie publikuje portow; QR jest dostepny tylko tymczasowo przez
-    `127.0.0.1`.
-  - Verify: `docker compose up -d`, restart obu kontenerow i ponowne
-    przetworzenie testowego wydatku bez ponownego zapisu pojedynczej pozycji.
-  - Files: `Dockerfile`, `docker-compose.yml`, `.dockerignore`.
-  - Depends on: Etap 3.
+- [x] Task: Package two containers for Raspberry Pi.
+  - Acceptance: Docker Compose runs only `signal-cli-rest-api` and worker, both with `restart: unless-stopped` and Signal / SQLite volumes. Worker waits for healthy Signal. Signal port bound only to `127.0.0.1:8080` (QR / debug). Worker uses internal `SIGNAL_API_URL=http://signal-cli-rest-api:8080`.
+  - Verify: `docker compose up --build -d`, restart both containers, and reprocess test expense without duplicate single item insert.
+  - Files: `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `tsconfig.build.json`.
+  - Depends on: Phase 3.
 
-- [ ] Task: Dodac opcjonalny tracing Langfuse.
-  - Acceptance: Kazda wiadomosc ma jeden trace z metadanymi LLM i wynikiem,
-    bez tresci Signal, promptu, `note` ani `raw_text`. Brak kluczy wylacza
-    tracing, a jego blad robi tylko `console.warn`.
-  - Verify: Uruchomic workera bez kluczy oraz z kluczami Langfuse; w obu
-    wariantach zapis wydatku i odpowiedz Signal dzialaja.
-  - Files: `src/tracing.ts`, `src/worker.ts`, `.env.example`.
-  - Depends on: Worker Signal.
+- [x] Task: Add optional Langfuse tracing.
+  - Acceptance: Each message produces one trace; router and expense parser are generations. Trace contains LLM prompt / response and Signal message text (for diagnostics). Missing keys disable tracing, and tracing errors only trigger `console.warn`.
+  - Verify: Run worker without keys and with Langfuse keys; in both cases expense persistence and Signal reply function correctly.
+  - Files: `src/tracing.ts`, `src/worker.ts`, `src/llm/generate.ts`, `.env.example`.
+  - Depends on: Signal worker.
 
-## Gotowe MVP
+## Completed MVP
 
-MVP jest gotowe po Etapie 4, gdy po restarcie kontenerow jedna testowa
-wiadomosc o wydatku zapisuje sie raz, raport pokazuje poprawne sumy per waluta,
-a nieobslugiwane tresci i echo odpowiedzi bota koncza jako `ignore`.
+The MVP is complete after Phase 4 when, following container restarts, a single test expense message is saved once, the report displays correct sums per currency, and unsupported content and bot response echoes resolve to `ignore`.
 
-Nie dodawaj przed tym durable inboxa, CSV, glosu, panelu WWW ani self-hosted
-Langfuse. Wroc do nich dopiero po potwierdzeniu, ze MVP jest uzywane.
-
+Do not add durable inbox, CSV, voice, web dashboard, or self-hosted Langfuse before this. Revisit those only after confirming that the MVP is in active use.
