@@ -58,6 +58,8 @@ async function readSocket(
   logger.info({ url }, "signal connecting");
   const socket = new WebSocket(url);
 
+  const activeTasks = new Set<Promise<void>>();
+
   await new Promise<void>((resolve) => {
     let settled = false;
 
@@ -90,7 +92,7 @@ async function readSocket(
 
       const items = Array.isArray(parsed) ? parsed : [parsed];
 
-      void (async () => {
+      const task = (async () => {
         for (const item of items) {
           try {
             await onPayload(item);
@@ -99,6 +101,9 @@ async function readSocket(
           }
         }
       })();
+
+      activeTasks.add(task);
+      task.finally(() => activeTasks.delete(task));
     });
 
     socket.addEventListener("error", () => {
@@ -121,6 +126,11 @@ async function readSocket(
       settle();
     }
   });
+
+  if (activeTasks.size > 0) {
+    logger.info({ tasks: activeTasks.size }, "waiting for active tasks to finish");
+    await Promise.allSettled(Array.from(activeTasks));
+  }
 }
 
 export async function listenForMessages(

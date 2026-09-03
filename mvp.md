@@ -47,10 +47,11 @@ No Express, Fastify, n8n, or additional HTTP server. A single process is suffici
 3. Queries LLM router solely for note type: `expense`, `report`, or `ignore`.
 4. Dispatches the full message to the handler selected by `switch`.
 5. `expense` handler calls the detailed LLM, validates with Zod, and persists items in a single SQLite transaction.
-6. `report` handler executes a fixed, parameterized SQLite query and sends the result to Signal.
+6. `report` handler executes a secondary LLM call to extract parameters, computes dates, and executes a fixed SQLite query safely.
 7. `ignore` handler exits with no action and no response.
 8. Asynchronously logs LLM trace in Langfuse (when configured).
 9. Uses `pino` for fast, structured, JSON-based logging across all components.
+10. Shuts down gracefully on `SIGINT`/`SIGTERM` using `AbortController`, waiting for active processing to finish and safely closing SQLite.
 
 Each LLM call has one retry using the same provider and model. If the router or expense handler still fails to return valid data, take no action and reply with `Could not recognize that message.`. Do not automatically switch GPT to Claude or vice versa.
 

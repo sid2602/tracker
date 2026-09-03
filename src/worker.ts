@@ -77,17 +77,26 @@ async function main(): Promise<void> {
     "worker started",
   );
 
+  const abortController = new AbortController();
+  let shuttingDown = false;
+
   const onShutdown = () => {
-    void shutdownTracing().finally(() => {
-      process.exit(0);
-    });
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info("shutting down worker...");
+    abortController.abort();
   };
+  
   process.once("SIGINT", onShutdown);
   process.once("SIGTERM", onShutdown);
 
   await listenForMessages(config, async (payload) => {
     await handleIncomingPayload(deps, payload);
-  });
+  }, { signal: abortController.signal });
+
+  await shutdownTracing();
+  await deps.db.destroy();
+  logger.info("worker stopped");
 }
 
 void main().catch((error: unknown) => {
