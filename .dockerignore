@@ -1,0 +1,12 @@
+node_modules
+dist
+data
+.env
+signal-cli-config
+.git
+.cursor
+*.md
+*.db
+**/*.test.ts
+src/scripts
+vitest.config.ts

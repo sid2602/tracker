@@ -33,12 +33,14 @@ export async function handleExpense(
       return {
         kind: "success",
         message: MESSAGE_ALREADY_SAVED,
+        insertedCount: 0,
       };
     }
 
     return {
       kind: "success",
       message: savedItemsMessage(inserted),
+      insertedCount: inserted,
     };
   } catch (error) {
     const message =

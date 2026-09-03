@@ -5,12 +5,16 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev:parse": "tsx src/scripts/dev-parse.ts",
     "start": "tsx src/worker.ts"
   },
   "dependencies": {
+    "@langfuse/otel": "^5.11.0",
+    "@langfuse/tracing": "^5.11.0",
+    "@opentelemetry/sdk-node": "^0.222.0",
     "ai": "^5.0.44",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.6.1",

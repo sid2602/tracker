@@ -15,6 +15,7 @@ export async function routeMessage(
     config,
     routerLlmSchema,
     getRouterPrompt(text),
+    "llm.router",
   );
 
   return toRouterResult(raw);

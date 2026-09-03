@@ -2,6 +2,7 @@ import { handleExpense } from "../domains/expenses/index.js";
 import { handleReport } from "../domains/reports/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
 import { routeMessage } from "../routing/router.js";
+import { recordMessageTrace } from "../tracing.js";
 import type { RouterResult } from "../routing/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
 
@@ -35,16 +36,82 @@ export async function processMessage(
     );
     const result = await dispatchMessage(deps, context, route);
 
-    if (result.kind === "failure") {
-      return { kind: "failure", message: UNRECOGNIZED_MESSAGE };
-    }
+    const finalResult: HandlerResult =
+      result.kind === "failure"
+        ? {
+            kind: "failure",
+            message: UNRECOGNIZED_MESSAGE,
+            errorCode: "unrecognized",
+          }
+        : result;
 
-    return result;
+    recordMessageTrace({
+      metadata: buildTraceMetadata(route, finalResult),
+      output: buildTraceOutput(finalResult),
+    });
+    return finalResult;
   } catch (error) {
     console.warn(
       `[${new Date().toISOString()}] Message processing failed`,
       error,
     );
-    return { kind: "failure", message: UNRECOGNIZED_MESSAGE };
+    const failure: HandlerResult = {
+      kind: "failure",
+      message: UNRECOGNIZED_MESSAGE,
+      errorCode: "processing_failed",
+    };
+    recordMessageTrace({
+      metadata: {
+        resultKind: "failure",
+        errorCode: "processing_failed",
+      },
+      output: buildTraceOutput(failure),
+    });
+    return failure;
   }
+}
+
+function buildTraceOutput(result: HandlerResult): unknown {
+  if (result.kind === "silent") {
+    return { kind: "silent" };
+  }
+
+  if (result.kind === "success") {
+    return {
+      kind: "success",
+      message: result.message,
+      insertedCount: result.insertedCount ?? null,
+    };
+  }
+
+  return {
+    kind: "failure",
+    message: result.message,
+    errorCode: result.errorCode ?? null,
+  };
+}
+
+function buildTraceMetadata(
+  route: RouterResult,
+  result: HandlerResult,
+): Record<string, string | number | boolean | null> {
+  const metadata: Record<string, string | number | boolean | null> = {
+    intent: route.intent,
+    resultKind: result.kind,
+  };
+
+  if (route.intent === "report") {
+    metadata.period = route.period;
+    metadata.group_by = route.group_by;
+  }
+
+  if (result.kind === "success" && result.insertedCount !== undefined) {
+    metadata.insertedCount = result.insertedCount;
+  }
+
+  if (result.kind === "failure") {
+    metadata.errorCode = result.errorCode ?? "unrecognized";
+  }
+
+  return metadata;
 }

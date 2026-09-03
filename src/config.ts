@@ -11,6 +11,9 @@ export type Config = {
   databasePath: string;
   signalApiUrl: string;
   signalPhoneNumber: string;
+  langfusePublicKey: string | null;
+  langfuseSecretKey: string | null;
+  langfuseBaseUrl: string;
 };
 
 function isLlmProvider(value: string): value is LlmProvider {
@@ -33,6 +36,11 @@ function requireUrl(name: string, value: string | undefined): string {
   } catch {
     throw new Error(`Invalid ${name}="${trimmed}"`);
   }
+}
+
+function optionalTrimmed(value: string | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
 export function loadConfig(): Config {
@@ -60,6 +68,11 @@ export function loadConfig(): Config {
     "SIGNAL_PHONE_NUMBER",
     process.env.SIGNAL_PHONE_NUMBER,
   );
+  const langfusePublicKey = optionalTrimmed(process.env.LANGFUSE_PUBLIC_KEY);
+  const langfuseSecretKey = optionalTrimmed(process.env.LANGFUSE_SECRET_KEY);
+  const langfuseBaseUrl =
+    optionalTrimmed(process.env.LANGFUSE_BASE_URL) ??
+    "https://cloud.langfuse.com";
 
   return {
     aiGatewayApiKey,
@@ -68,5 +81,8 @@ export function loadConfig(): Config {
     databasePath,
     signalApiUrl,
     signalPhoneNumber,
+    langfusePublicKey,
+    langfuseSecretKey,
+    langfuseBaseUrl,
   };
 }

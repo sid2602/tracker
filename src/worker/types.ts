@@ -8,8 +8,8 @@ export type MessageContext = {
 };
 
 export type HandlerResult =
-  | { kind: "success"; message: string }
-  | { kind: "failure"; message: string }
+  | { kind: "success"; message: string; insertedCount?: number }
+  | { kind: "failure"; message: string; errorCode?: string }
   | { kind: "silent" };
 
 export type AppDeps = {

@@ -26,6 +26,9 @@ const config: Config = {
   databasePath: "./data/expenses.db",
   signalApiUrl: "http://127.0.0.1:8080",
   signalPhoneNumber: "+15005550100",
+  langfusePublicKey: null,
+  langfuseSecretKey: null,
+  langfuseBaseUrl: "https://cloud.langfuse.com",
 };
 
 const deps = { db: {}, config } as AppDeps;
@@ -66,6 +69,7 @@ describe("processMessage", () => {
     await expect(processMessage(deps, context)).resolves.toEqual({
       kind: "failure",
       message: UNRECOGNIZED_MESSAGE,
+      errorCode: "unrecognized",
     });
   });
 
@@ -75,6 +79,7 @@ describe("processMessage", () => {
     await expect(processMessage(deps, context)).resolves.toEqual({
       kind: "failure",
       message: UNRECOGNIZED_MESSAGE,
+      errorCode: "processing_failed",
     });
   });
 });

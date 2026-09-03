@@ -58,8 +58,20 @@ async function readSocket(
   const socket = new WebSocket(url);
 
   await new Promise<void>((resolve) => {
+    let settled = false;
+
+    const settle = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    };
+
     const onAbort = () => {
       socket.close();
+      settle();
     };
 
     signal?.addEventListener("abort", onAbort, { once: true });
@@ -95,16 +107,22 @@ async function readSocket(
 
     socket.addEventListener("error", () => {
       console.warn(`[${new Date().toISOString()}] signal websocket error`);
+      try {
+        socket.close();
+      } catch {
+        // ignore close failures after a failed handshake
+      }
+      settle();
     });
 
     socket.addEventListener("close", () => {
-      signal?.removeEventListener("abort", onAbort);
       console.log(`[${new Date().toISOString()}] signal disconnected`);
-      resolve();
+      settle();
     });
 
     if (signal?.aborted) {
       socket.close();
+      settle();
     }
   });
 }

@@ -21,6 +21,9 @@ const config: Config = {
   databasePath: "./data/expenses.db",
   signalApiUrl: "http://127.0.0.1:8080",
   signalPhoneNumber: "+15005550100",
+  langfusePublicKey: null,
+  langfuseSecretKey: null,
+  langfuseBaseUrl: "https://cloud.langfuse.com",
 };
 
 function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {

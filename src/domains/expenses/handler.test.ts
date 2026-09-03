@@ -21,6 +21,9 @@ const config: Config = {
   databasePath: "./data/expenses.db",
   signalApiUrl: "http://127.0.0.1:8080",
   signalPhoneNumber: "+15005550100",
+  langfusePublicKey: null,
+  langfuseSecretKey: null,
+  langfuseBaseUrl: "https://cloud.langfuse.com",
 };
 
 const parseExpensesMock = vi.fn<
@@ -84,6 +87,7 @@ describe("handleExpense", () => {
     expect(result).toEqual({
       kind: "success",
       message: "Saved 1 item",
+      insertedCount: 1,
     });
     expect(countExpenses(deps.db)).toBe(1);
 
@@ -126,6 +130,7 @@ describe("handleExpense", () => {
     expect(result).toEqual({
       kind: "success",
       message: "Saved 2 items",
+      insertedCount: 2,
     });
     expect(countExpenses(deps.db)).toBe(2);
   });
@@ -171,10 +176,12 @@ describe("handleExpense", () => {
     expect(first).toEqual({
       kind: "success",
       message: "Saved 1 item",
+      insertedCount: 1,
     });
     expect(second).toEqual({
       kind: "success",
       message: "Message already saved",
+      insertedCount: 0,
     });
     expect(countExpenses(deps.db)).toBe(1);
   });

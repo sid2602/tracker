@@ -12,6 +12,7 @@ export async function parseExpenses(
     config,
     expenseResultSchema,
     getExpensesPrompt(text, referenceDate),
+    "llm.expense",
   );
 
   return expenseResultSchema.parse(result);

@@ -9,3 +9,18 @@ services:
       - "127.0.0.1:8080:8080"
     volumes:
       - ./signal-cli-config:/home/.local/share/signal-cli
+
+  worker:
+    build: .
+    container_name: tracker-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      SIGNAL_API_URL: http://signal-cli-rest-api:8080
+      DATABASE_PATH: /app/data/expenses.db
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      signal-cli-rest-api:
+        condition: service_healthy
