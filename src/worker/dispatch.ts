@@ -16,7 +16,7 @@ export async function dispatchMessage(
     case "expense":
       return handleExpense(deps, context);
     case "report":
-      return handleReport(deps, route);
+      return handleReport(deps, context);
     case "ignore":
       return { kind: "silent" };
   }
@@ -91,11 +91,6 @@ function buildTraceMetadata(
     intent: route.intent,
     resultKind: result.kind,
   };
-
-  if (route.intent === "report") {
-    metadata.period = route.period;
-    metadata.group_by = route.group_by;
-  }
 
   if (result.kind === "success" && result.insertedCount !== undefined) {
     metadata.insertedCount = result.insertedCount;

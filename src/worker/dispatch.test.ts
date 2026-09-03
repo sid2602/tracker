@@ -62,13 +62,11 @@ describe("dispatchMessage", () => {
 
     const route = {
       intent: "report" as const,
-      period: "this_month" as const,
-      group_by: "total" as const,
     };
 
     const result = await dispatchMessage(deps, context, route);
 
-    expect(handleReportMock).toHaveBeenCalledWith(deps, route);
+    expect(handleReportMock).toHaveBeenCalledWith(deps, context);
     expect(result).toEqual({
       kind: "success",
       message: "📊 Report: this month\n\nno expenses",

@@ -6,25 +6,17 @@ describe("routing schema", () => {
     expect(
       routerLlmSchema.parse({
         intent: "expense",
-        period: null,
-        group_by: null,
       }),
     ).toEqual({
       intent: "expense",
-      period: null,
-      group_by: null,
     });
 
     expect(
       routerLlmSchema.parse({
         intent: "report",
-        period: "this_month",
-        group_by: "category",
       }),
     ).toEqual({
       intent: "report",
-      period: "this_month",
-      group_by: "category",
     });
   });
 
@@ -32,8 +24,6 @@ describe("routing schema", () => {
     expect(() =>
       routerLlmSchema.parse({
         intent: "unknown",
-        period: null,
-        group_by: null,
       }),
     ).toThrow();
   });
@@ -42,31 +32,15 @@ describe("routing schema", () => {
     expect(
       toRouterResult({
         intent: "expense",
-        period: null,
-        group_by: null,
       }),
     ).toEqual({ intent: "expense" });
 
     expect(
       toRouterResult({
         intent: "report",
-        period: "last_month",
-        group_by: "total",
       }),
     ).toEqual({
       intent: "report",
-      period: "last_month",
-      group_by: "total",
     });
-  });
-
-  it("rejects report without period or group_by", () => {
-    expect(() =>
-      toRouterResult({
-        intent: "report",
-        period: null,
-        group_by: "total",
-      }),
-    ).toThrow();
   });
 });

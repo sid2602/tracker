@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
 import { initSchema, openDatabase } from "../../db/connection.js";
 import {
@@ -10,9 +10,24 @@ import {
 } from "../expenses/repository.js";
 import type { AppDeps } from "../../worker/types.js";
 import { handleReport } from "./handler.js";
+import type { ReportParams } from "./schema.js";
 
 const TEST_SOURCE_AUTHOR = "+15005550100";
 const NOW = new Date("2026-09-15T12:00:00.000Z");
+const context = {
+  sourceAuthor: TEST_SOURCE_AUTHOR,
+  sourceTimestamp: 1_700_000_000_000,
+  rawText: "report",
+};
+
+const parseReportMock = vi.fn<
+  (config: Config, text: string) => Promise<ReportParams>
+>();
+
+vi.mock("./parser.js", () => ({
+  parseReport: (configArg: Config, text: string) =>
+    parseReportMock(configArg, text),
+}));
 
 const config: Config = {
   aiGatewayApiKey: "test-gateway-key",
@@ -50,6 +65,7 @@ describe("handleReport", () => {
     const db = openDatabase(join(tempDir, "expenses.db"));
     await initSchema(db);
     deps = { db, config, now: () => NOW };
+    parseReportMock.mockReset();
   });
 
   afterEach(async () => {
@@ -58,11 +74,12 @@ describe("handleReport", () => {
   });
 
   it("returns empty this_month totals", async () => {
-    const result = await handleReport(deps, {
-      intent: "report",
+    parseReportMock.mockResolvedValue({
       period: "this_month",
       group_by: "total",
     });
+
+    const result = await handleReport(deps, context);
 
     expect(result).toEqual({
       kind: "success",
@@ -96,11 +113,12 @@ describe("handleReport", () => {
       }),
     ]);
 
-    const result = await handleReport(deps, {
-      intent: "report",
+    parseReportMock.mockResolvedValue({
       period: "this_month",
       group_by: "total",
     });
+
+    const result = await handleReport(deps, context);
 
     expect(result).toEqual({
       kind: "success",
@@ -121,11 +139,12 @@ describe("handleReport", () => {
       }),
     ]);
 
-    const result = await handleReport(deps, {
-      intent: "report",
+    parseReportMock.mockResolvedValue({
       period: "last_month",
       group_by: "total",
     });
+
+    const result = await handleReport(deps, context);
 
     expect(result).toEqual({
       kind: "success",
@@ -164,11 +183,12 @@ describe("handleReport", () => {
       }),
     ]);
 
-    const result = await handleReport(deps, {
-      intent: "report",
+    parseReportMock.mockResolvedValue({
       period: "this_month",
       group_by: "category",
     });
+
+    const result = await handleReport(deps, context);
 
     expect(result).toEqual({
       kind: "success",

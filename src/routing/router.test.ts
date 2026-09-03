@@ -31,7 +31,7 @@ describe("routeMessage", () => {
 
   it("accepts valid response", async () => {
     generateObjectMock.mockResolvedValue({
-      object: { intent: "expense", period: null, group_by: null },
+      object: { intent: "expense" },
     });
 
     await expect(routeMessage(config, "zakupy 15 zl")).resolves.toEqual({
@@ -43,7 +43,7 @@ describe("routeMessage", () => {
     generateObjectMock
       .mockRejectedValueOnce(new Error("invalid response"))
       .mockResolvedValueOnce({
-        object: { intent: "ignore", period: null, group_by: null },
+        object: { intent: "ignore" },
       });
 
     await expect(routeMessage(config, "losowa notatka")).resolves.toEqual({
@@ -57,15 +57,11 @@ describe("routeMessage", () => {
     generateObjectMock.mockResolvedValue({
       object: {
         intent: "report",
-        period: "this_month",
-        group_by: "total",
       },
     });
 
     await expect(routeMessage(config, "report this month")).resolves.toEqual({
       intent: "report",
-      period: "this_month",
-      group_by: "total",
     });
   });
 });
