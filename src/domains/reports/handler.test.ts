@@ -45,15 +45,15 @@ describe("handleReport", () => {
   let tempDir: string;
   let deps: AppDeps;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "tracker-report-test-"));
     const db = openDatabase(join(tempDir, "expenses.db"));
-    initSchema(db);
+    await initSchema(db);
     deps = { db, config, now: () => NOW };
   });
 
-  afterEach(() => {
-    deps.db.close();
+  afterEach(async () => {
+    await deps.db.destroy();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -71,7 +71,7 @@ describe("handleReport", () => {
   });
 
   it("sums this_month totals per currency", async () => {
-    insertExpenses(deps.db, [
+    await insertExpenses(deps.db, [
       createExpense({ itemIndex: 0, amountCents: 1500, currency: "PLN" }),
       createExpense({
         itemIndex: 1,
@@ -109,7 +109,7 @@ describe("handleReport", () => {
   });
 
   it("sums last_month totals", async () => {
-    insertExpenses(deps.db, [
+    await insertExpenses(deps.db, [
       createExpense({
         amountCents: 700,
         occurredOn: "2026-08-02",
@@ -134,7 +134,7 @@ describe("handleReport", () => {
   });
 
   it("groups this_month by category and currency", async () => {
-    insertExpenses(deps.db, [
+    await insertExpenses(deps.db, [
       createExpense({
         itemIndex: 0,
         amountCents: 1500,

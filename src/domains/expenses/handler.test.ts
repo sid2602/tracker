@@ -49,19 +49,19 @@ describe("handleExpense", () => {
   let dbPath: string;
   let deps: AppDeps;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     tempDir = mkdtempSync(join(tmpdir(), "tracker-expense-test-"));
     dbPath = join(tempDir, "expenses.db");
     const db = openDatabase(dbPath);
-    initSchema(db);
+    await initSchema(db);
     deps = { db, config };
     parseExpensesMock.mockReset();
     vi.spyOn(console, "log").mockImplementation(() => {});
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
-    deps.db.close();
+    await deps.db.destroy();
     rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -89,9 +89,9 @@ describe("handleExpense", () => {
       message: "Saved 1 item",
       insertedCount: 1,
     });
-    expect(countExpenses(deps.db)).toBe(1);
+    expect(await countExpenses(deps.db)).toBe(1);
 
-    const stored = getExpenseByKey(
+    const stored = await getExpenseByKey(
       deps.db,
       TEST_SOURCE_AUTHOR,
       1_700_000_000_000,
@@ -132,7 +132,7 @@ describe("handleExpense", () => {
       message: "Saved 2 items",
       insertedCount: 2,
     });
-    expect(countExpenses(deps.db)).toBe(2);
+    expect(await countExpenses(deps.db)).toBe(2);
   });
 
   it("does not save when LLM parsing fails", async () => {
@@ -148,7 +148,7 @@ describe("handleExpense", () => {
       kind: "failure",
       message: "invalid response",
     });
-    expect(countExpenses(deps.db)).toBe(0);
+    expect(await countExpenses(deps.db)).toBe(0);
   });
 
   it("ignores duplicate message on second insert", async () => {
@@ -183,6 +183,6 @@ describe("handleExpense", () => {
       message: "Message already saved",
       insertedCount: 0,
     });
-    expect(countExpenses(deps.db)).toBe(1);
+    expect(await countExpenses(deps.db)).toBe(1);
   });
 });

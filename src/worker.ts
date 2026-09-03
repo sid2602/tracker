@@ -68,7 +68,7 @@ async function main(): Promise<void> {
   await initTracing(config);
 
   const db = openDatabase(config.databasePath);
-  initSchema(db);
+  await initSchema(db);
   const deps: AppDeps = { db, config };
 
   log(

@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Kysely } from "kysely";
+import type { AppDatabase } from "../../db/schema.js";
 import type { DateRange } from "../../lib/periods.js";
 
 export type TotalBucket = {
@@ -12,86 +13,46 @@ export type CategoryBucket = {
   amountCents: number;
 };
 
-function isTotalRow(
-  row: unknown,
-): row is { currency: string; amount_cents: number } {
-  return (
-    typeof row === "object" &&
-    row !== null &&
-    "currency" in row &&
-    "amount_cents" in row &&
-    typeof row.currency === "string" &&
-    typeof row.amount_cents === "number"
-  );
-}
-
-function isCategoryRow(
-  row: unknown,
-): row is { category: string; currency: string; amount_cents: number } {
-  return (
-    isTotalRow(row) &&
-    "category" in row &&
-    typeof row.category === "string"
-  );
-}
-
-export function queryTotals(
-  db: Database.Database,
+export async function queryTotals(
+  db: Kysely<AppDatabase>,
   range: DateRange,
-): TotalBucket[] {
-  const rows = db
-    .prepare(
-      `SELECT currency, SUM(amount_cents) AS amount_cents
-       FROM expenses
-       WHERE occurred_on >= ? AND occurred_on <= ?
-       GROUP BY currency
-       ORDER BY currency`,
-    )
-    .all(range.start, range.end);
+): Promise<TotalBucket[]> {
+  const { sum } = db.fn;
 
-  const buckets: TotalBucket[] = [];
+  const rows = await db
+    .selectFrom("expenses")
+    .select(["currency", sum<number>("amount_cents").as("amount_cents")])
+    .where("occurred_on", ">=", range.start)
+    .where("occurred_on", "<=", range.end)
+    .groupBy("currency")
+    .orderBy("currency")
+    .execute();
 
-  for (const row of rows) {
-    if (!isTotalRow(row)) {
-      continue;
-    }
-
-    buckets.push({
-      currency: row.currency,
-      amountCents: row.amount_cents,
-    });
-  }
-
-  return buckets;
+  return rows.map((row) => ({
+    currency: row.currency,
+    amountCents: Number(row.amount_cents ?? 0),
+  }));
 }
 
-export function queryByCategory(
-  db: Database.Database,
+export async function queryByCategory(
+  db: Kysely<AppDatabase>,
   range: DateRange,
-): CategoryBucket[] {
-  const rows = db
-    .prepare(
-      `SELECT category, currency, SUM(amount_cents) AS amount_cents
-       FROM expenses
-       WHERE occurred_on >= ? AND occurred_on <= ?
-       GROUP BY category, currency
-       ORDER BY category, currency`,
-    )
-    .all(range.start, range.end);
+): Promise<CategoryBucket[]> {
+  const { sum } = db.fn;
 
-  const buckets: CategoryBucket[] = [];
+  const rows = await db
+    .selectFrom("expenses")
+    .select(["category", "currency", sum<number>("amount_cents").as("amount_cents")])
+    .where("occurred_on", ">=", range.start)
+    .where("occurred_on", "<=", range.end)
+    .groupBy(["category", "currency"])
+    .orderBy("category")
+    .orderBy("currency")
+    .execute();
 
-  for (const row of rows) {
-    if (!isCategoryRow(row)) {
-      continue;
-    }
-
-    buckets.push({
-      category: row.category,
-      currency: row.currency,
-      amountCents: row.amount_cents,
-    });
-  }
-
-  return buckets;
+  return rows.map((row) => ({
+    category: row.category,
+    currency: row.currency,
+    amountCents: Number(row.amount_cents ?? 0),
+  }));
 }

@@ -1,6 +1,8 @@
 import Database from "better-sqlite3";
+import { Kysely, SqliteDialect, sql } from "kysely";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import type { AppDatabase } from "./schema.js";
 
 const CREATE_EXPENSES_TABLE = `
 CREATE TABLE IF NOT EXISTS expenses (
@@ -19,11 +21,16 @@ CREATE TABLE IF NOT EXISTS expenses (
 );
 `;
 
-export function openDatabase(path: string): Database.Database {
+export function openDatabase(path: string): Kysely<AppDatabase> {
   mkdirSync(dirname(path), { recursive: true });
-  return new Database(path);
+  const db = new Database(path);
+  return new Kysely<AppDatabase>({
+    dialect: new SqliteDialect({
+      database: db,
+    }),
+  });
 }
 
-export function initSchema(db: Database.Database): void {
-  db.exec(CREATE_EXPENSES_TABLE);
+export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
+  await sql.raw(CREATE_EXPENSES_TABLE).execute(db);
 }

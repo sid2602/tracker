@@ -1,4 +1,5 @@
-import type Database from "better-sqlite3";
+import type { Kysely } from "kysely";
+import type { AppDatabase } from "../db/schema.js";
 import type { Config } from "../config.js";
 
 export type MessageContext = {
@@ -13,7 +14,7 @@ export type HandlerResult =
   | { kind: "silent" };
 
 export type AppDeps = {
-  db: Database.Database;
+  db: Kysely<AppDatabase>;
   config: Config;
   now?: () => Date;
 };

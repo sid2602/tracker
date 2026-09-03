@@ -16,14 +16,14 @@ export async function handleReport(
   const range = getPeriodRange(params.period, deps.now?.() ?? new Date());
 
   if (params.group_by === "category") {
-    const rows = queryByCategory(deps.db, range);
+    const rows = await queryByCategory(deps.db, range);
     return {
       kind: "success",
       message: formatCategoryReport(params.period, rows),
     };
   }
 
-  const rows = queryTotals(deps.db, range);
+  const rows = await queryTotals(deps.db, range);
   return {
     kind: "success",
     message: formatTotalReport(params.period, rows),

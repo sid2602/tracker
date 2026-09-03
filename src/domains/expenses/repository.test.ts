@@ -40,17 +40,17 @@ describe("expenses repository", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("inserts expense", () => {
+  it("inserts expense", async () => {
     const db = openDatabase(dbPath);
-    initSchema(db);
+    await initSchema(db);
 
     const expense = createExpense();
-    const result = insertExpenses(db, [expense]);
+    const result = await insertExpenses(db, [expense]);
 
     expect(result.inserted).toBe(1);
-    expect(countExpenses(db)).toBe(1);
+    expect(await countExpenses(db)).toBe(1);
 
-    const stored = getExpenseByKey(
+    const stored = await getExpenseByKey(
       db,
       expense.sourceAuthor,
       expense.sourceTimestamp,
@@ -58,36 +58,36 @@ describe("expenses repository", () => {
     );
 
     expect(stored?.amount_cents).toBe(1500);
-    db.close();
+    await db.destroy();
   });
 
-  it("ignores duplicate message", () => {
+  it("ignores duplicate message", async () => {
     const db = openDatabase(dbPath);
-    initSchema(db);
+    await initSchema(db);
 
     const expense = createExpense();
-    const first = insertExpenses(db, [expense]);
-    const second = insertExpenses(db, [expense]);
+    const first = await insertExpenses(db, [expense]);
+    const second = await insertExpenses(db, [expense]);
 
     expect(first.inserted).toBe(1);
     expect(second.inserted).toBe(0);
-    expect(countExpenses(db)).toBe(1);
-    db.close();
+    expect(await countExpenses(db)).toBe(1);
+    await db.destroy();
   });
 
-  it("inserts multiple items in one transaction", () => {
+  it("inserts multiple items in one transaction", async () => {
     const db = openDatabase(dbPath);
-    initSchema(db);
+    await initSchema(db);
 
     const expenses = [
       createExpense({ itemIndex: 0, amountCents: 1000, note: "chleb" }),
       createExpense({ itemIndex: 1, amountCents: 500, note: "mleko" }),
     ];
 
-    const result = insertExpenses(db, expenses);
+    const result = await insertExpenses(db, expenses);
 
     expect(result.inserted).toBe(2);
-    expect(countExpenses(db)).toBe(2);
-    db.close();
+    expect(await countExpenses(db)).toBe(2);
+    await db.destroy();
   });
 });

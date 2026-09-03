@@ -23,7 +23,7 @@ export async function handleExpense(
     const referenceDate = getDate(TIME_ZONE, deps.now?.() ?? new Date());
     const parsed = await parse(deps.config, context.rawText, referenceDate);
     const expenses = mapParsedExpenses(parsed, context);
-    const { inserted } = insertExpenses(deps.db, expenses);
+    const { inserted } = await insertExpenses(deps.db, expenses);
 
     console.log(
       `[${new Date().toISOString()}] expense details: ${formatExpenseDetails(expenses)}`,

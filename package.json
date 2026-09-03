@@ -18,6 +18,7 @@
     "ai": "^5.0.44",
     "better-sqlite3": "^11.10.0",
     "dotenv": "^16.6.1",
+    "kysely": "^0.29.5",
     "zod": "^3.25.76"
   },
   "devDependencies": {
