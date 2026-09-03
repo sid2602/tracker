@@ -9,6 +9,10 @@ export async function withRetry<T>(
       return await fn();
     } catch (error) {
       lastError = error;
+      if (attempt < maxAttempts - 1) {
+        const delayMs = Math.pow(2, attempt) * 500; // 500ms, 1000ms, etc.
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
   }
 

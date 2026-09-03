@@ -50,6 +50,7 @@ No Express, Fastify, n8n, or additional HTTP server. A single process is suffici
 6. `report` handler executes a fixed, parameterized SQLite query and sends the result to Signal.
 7. `ignore` handler exits with no action and no response.
 8. Asynchronously logs LLM trace in Langfuse (when configured).
+9. Uses `pino` for fast, structured, JSON-based logging across all components.
 
 Each LLM call has one retry using the same provider and model. If the router or expense handler still fails to return valid data, take no action and reply with `Could not recognize that message.`. Do not automatically switch GPT to Claude or vice versa.
 
@@ -72,21 +73,21 @@ src/
 
 ## Intents and Dispatch
 
-The router uses a small, closed Zod schema (for Gateway as a flat object with nullable `period` / `group_by`, then normalized into the result type):
+The router uses a small, closed Zod schema (for Gateway as a flat object returning only the `intent`):
 
 ```text
 expense | report | ignore
 ```
 
-The router does not assign categories nor execute SQL. Only the `expense` handler receives the category list, date, and detailed expense schema. This allows adding an independent note type later without enlarging the expense prompt.
+The router does not assign categories nor execute SQL. Only the domain handlers (`expense` and `report`) receive the full text and execute their own secondary, detailed LLM prompts. This two-step routing architecture prevents the global router prompt from ballooning as new features are added.
 
-The `report` handler accepts only validated parameters, e.g. `period: this_month | last_month` and `group_by: total | category`. It computes date boundaries in `Europe/Warsaw` and executes predefined SQLite queries. The LLM never returns raw SQL, column names, or arbitrary filters.
+The `report` handler executes a secondary LLM call to extract parameters, e.g. `period: this_month | last_month` and `group_by: total | category`. It computes date boundaries in `Europe/Warsaw` and executes predefined SQLite queries (built safely via Kysely). The LLM never returns raw SQL, column names, or arbitrary filters.
 
 `ignore` is a valid, explicit router decision for a note with no supported action. Do not treat a Zod validation error as `ignore`.
 
 ## Data Model
 
-Use `better-sqlite3`. Store amounts in cents/groszy as `INTEGER`, not as `REAL`. Store currency as a 3-letter ISO 4217 code. Reports always group totals by `currency`; do not sum different currencies together.
+Use `kysely` as a type-safe query builder over `better-sqlite3`. Store amounts in cents/groszy as `INTEGER`, not as `REAL`. Store currency as a 3-letter ISO 4217 code. Reports always group totals by `currency`; do not sum different currencies together.
 
 ```sql
 CREATE TABLE expenses (
