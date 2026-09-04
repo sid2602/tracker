@@ -11,7 +11,18 @@ describe("category action schema", () => {
     expect(result.categoryName).toBeNull();
   });
 
-  it("accepts valid add action with name", () => {
+  it("accepts valid add action with name and description", () => {
+    const result = categoryActionSchema.parse({
+      action: "add",
+      categoryName: "subscriptions",
+      description: "netflix, spotify",
+    });
+    expect(result.action).toBe("add");
+    expect(result.categoryName).toBe("subscriptions");
+    expect(result.description).toBe("netflix, spotify");
+  });
+
+  it("accepts valid add action without description", () => {
     const result = categoryActionSchema.parse({
       action: "add",
       categoryName: "subscriptions",

@@ -28,21 +28,24 @@ describe("categories repository", () => {
   });
 
   it("adds category and retrieves it", async () => {
-    const inserted = await addCategory(db, "subscriptions");
+    const inserted = await addCategory(db, "subscriptions", "netflix");
     expect(inserted).toBe(true);
     
     const categories = await getAllCategories(db);
-    expect(categories).toContain("subscriptions");
+    expect(categories.length).toBe(1);
+    expect(categories[0]?.name).toBe("subscriptions");
+    expect(categories[0]?.description).toBe("netflix");
   });
   
   it("does not insert duplicate category", async () => {
-    await addCategory(db, "subscriptions");
-    const insertedAgain = await addCategory(db, "subscriptions");
+    await addCategory(db, "subscriptions", "netflix");
+    const insertedAgain = await addCategory(db, "subscriptions", "spotify");
     
     expect(insertedAgain).toBe(false);
     
     const categories = await getAllCategories(db);
     expect(categories.length).toBe(1);
+    expect(categories[0]?.description).toBe("netflix");
   });
 
   it("removes existing category", async () => {
@@ -51,7 +54,7 @@ describe("categories repository", () => {
     
     expect(removed).toBe(true);
     const categories = await getAllCategories(db);
-    expect(categories).not.toContain("pets");
+    expect(categories.map(c => c.name)).not.toContain("pets");
   });
 
   it("returns false when removing non-existing category", async () => {

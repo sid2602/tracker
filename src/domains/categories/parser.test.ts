@@ -34,7 +34,7 @@ describe("parseCategoryAction", () => {
     generateObjectMock
       .mockRejectedValueOnce(new Error("invalid response"))
       .mockResolvedValueOnce({
-        object: { action: "add", categoryName: "pets" },
+        object: { action: "add", categoryName: "pets", description: "karma" },
       });
 
     await expect(
@@ -42,6 +42,7 @@ describe("parseCategoryAction", () => {
     ).resolves.toEqual({
       action: "add",
       categoryName: "pets",
+      description: "karma",
     });
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);

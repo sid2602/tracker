@@ -73,10 +73,10 @@ describe("handleCategory", () => {
   });
 
   it("adds a new category and lists it", async () => {
-    parseCategoryActionMock.mockResolvedValue({ action: "add", categoryName: "pets" });
+    parseCategoryActionMock.mockResolvedValue({ action: "add", categoryName: "pets", description: "karma, vet" });
 
     const resultAdd = await handleCategory(deps, {
-      messageKey: "test-key-1", sourceAuthor: "+480", sourceTimestamp: 1, rawText: "add pets",
+      messageKey: "test-key-1", sourceAuthor: "+480", sourceTimestamp: 1, rawText: "add pets karma, vet",
     });
 
     expect(resultAdd).toEqual({
@@ -91,7 +91,7 @@ describe("handleCategory", () => {
 
     expect(resultList).toEqual({
       kind: "success",
-      message: "Your categories: pets",
+      message: "Your categories:\n- pets (karma, vet)",
     });
   });
 

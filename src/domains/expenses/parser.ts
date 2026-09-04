@@ -7,7 +7,7 @@ export async function parseExpenses(
   config: Config,
   text: string,
   referenceDate: string,
-  categories: string[],
+  categories: { name: string, description: string | null }[],
 ): Promise<ExpenseResult> {
   const schema = buildExpenseResultSchema(categories);
   const result = await generateStructured(

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildExpenseResultSchema } from "./schema.js";
 
-const expenseResultSchema = buildExpenseResultSchema(["groceries", "food"]);
+const expenseResultSchema = buildExpenseResultSchema([{ name: "groceries", description: null }, { name: "food", description: null }]);
 
 describe("expenses schema", () => {
   it("rejects expense category outside schema", () => {

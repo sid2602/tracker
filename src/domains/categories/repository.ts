@@ -1,17 +1,21 @@
 import type { Kysely } from "kysely";
-import type { AppDatabase } from "../../db/schema.js";
+import type { AppDatabase, CategoryTable } from "../../db/schema.js";
 
-export async function getAllCategories(db: Kysely<AppDatabase>): Promise<string[]> {
-  const rows = await db.selectFrom("categories").select("name").orderBy("name").execute();
-  return rows.map((r) => r.name);
+export async function getAllCategories(db: Kysely<AppDatabase>): Promise<CategoryTable[]> {
+  const rows = await db.selectFrom("categories").selectAll().orderBy("name").execute();
+  return rows;
 }
 
-export async function addCategory(db: Kysely<AppDatabase>, name: string): Promise<boolean> {
+export async function addCategory(
+  db: Kysely<AppDatabase>, 
+  name: string, 
+  description?: string | null
+): Promise<boolean> {
   const now = new Date().toISOString();
   
   const result = await db
     .insertInto("categories")
-    .values({ name, created_at: now })
+    .values({ name, description: description ?? null, created_at: now })
     .onConflict((oc) => oc.doNothing())
     .executeTakeFirst();
     

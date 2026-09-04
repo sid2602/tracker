@@ -7,10 +7,12 @@ export const baseExpenseItemSchema = z.object({
   note: z.string().min(1),
 });
 
-export function buildExpenseResultSchema(categories: string[]) {
+export function buildExpenseResultSchema(categories: { name: string, description: string | null }[]) {
+  const categoryNames = categories.map((c) => c.name);
+  
   // If there are no categories, provide a fallback or string
-  const categorySchema = categories.length > 0 
-    ? z.enum([categories[0], ...categories.slice(1)] as any) 
+  const categorySchema = categoryNames.length > 0 
+    ? z.enum([categoryNames[0], ...categoryNames.slice(1)] as any) 
     : z.string();
     
   const itemSchema = baseExpenseItemSchema.extend({

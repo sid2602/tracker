@@ -29,6 +29,7 @@ export interface InboxTable {
 
 export interface CategoryTable {
   name: string;
+  description: string | null;
   created_at: string;
 }
 

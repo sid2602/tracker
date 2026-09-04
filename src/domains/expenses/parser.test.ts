@@ -48,7 +48,7 @@ describe("parseExpenses", () => {
       });
 
     await expect(
-      parseExpenses(config, "zakupy 15 zl", "2026-09-01", ["groceries", "food"]),
+      parseExpenses(config, "zakupy 15 zl", "2026-09-01", [{ name: "groceries", description: "supermarket" }, { name: "food", description: null }]),
     ).resolves.toEqual({
       items: [
         {
@@ -68,7 +68,7 @@ describe("parseExpenses", () => {
     generateObjectMock.mockRejectedValue(new Error("invalid response"));
 
     await expect(
-      parseExpenses(config, "zakupy 15 zl", "2026-09-01", ["groceries", "food"]),
+      parseExpenses(config, "zakupy 15 zl", "2026-09-01", [{ name: "groceries", description: "supermarket" }, { name: "food", description: null }]),
     ).rejects.toThrow("invalid response");
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);

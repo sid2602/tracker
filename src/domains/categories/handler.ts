@@ -14,10 +14,14 @@ export async function handleCategory(
     switch (parsed.action) {
       case "list": {
         const categories = await getAllCategories(deps.db);
+        const formatted = categories.map((c) => 
+          c.description ? `- ${c.name} (${c.description})` : `- ${c.name}`
+        ).join("\n");
+        
         return {
           kind: "success",
           message: categories.length > 0 
-            ? `Your categories: ${categories.join(", ")}` 
+            ? `Your categories:\n${formatted}` 
             : "You don't have any saved categories.",
         };
       }
@@ -27,7 +31,7 @@ export async function handleCategory(
           return { kind: "failure", message: "No category name provided to add." };
         }
         const name = parsed.categoryName.trim().toLowerCase();
-        const inserted = await addCategory(deps.db, name);
+        const inserted = await addCategory(deps.db, name, parsed.description);
         if (inserted) {
           return { kind: "success", message: `Category added: ${name}` };
         }
