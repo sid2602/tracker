@@ -23,7 +23,11 @@ Always adhere to these rules when modifying or proposing code. Do not suggest al
 
 4. **Testing & Validation:**
    - Use `vitest`. Ensure high test coverage for any new logic (especially parsers, routers, and DB operations).
-   - **CRITICAL**: Whenever you create a new domain, file, or feature, you MUST proactively write unit tests for it. Mimic the existing test structure (e.g. `*.test.ts`). Do not skip writing tests.
+   - **CRITICAL (Unit Tests)**: Whenever you create a new domain, file, or feature, you MUST proactively write unit tests for it. Mimic the existing test structure (e.g. `*.test.ts`). Do not skip writing tests.
+   - **CRITICAL (Eval Tests)**: Any modifications to AI Prompts or new AI parsers MUST be covered by LLM Evaluation Tests (`*.eval.test.ts`). These tests verify that the model correctly parses a wide range of user messages (in English and Polish).
+     - Standard test run (`npm run verify` or `npm run test`) automatically ignores `.eval.test.ts` files to save AI Gateway tokens.
+     - To run all Eval tests: `SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npm run test:eval`
+     - To run Eval tests for a specific domain: `RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/domains/modifications/parser.eval.test.ts`
    - After making code changes, ALWAYS run `npm run verify` to ensure types and tests pass before declaring the task complete.
 
 5. **Code Structure (Domain Pattern):**
