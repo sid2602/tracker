@@ -13,6 +13,6 @@ Rules for date resolution:
 
 group_by:
 - total: just the total sum, default if not specified
-- category: grouped by category (e.g. "by category", "categories", "breakdown")
+- category: grouped by category (e.g. "by category", "categories", "breakdown", "na kategorie", "kategorie", "według kategorii", "ze względu na kategorie")
 
 Message: ${text}`;
