@@ -1,6 +1,7 @@
 import { handleExpense } from "../domains/expenses/index.js";
 import { logger } from "../lib/logger.js";
 import { handleReport } from "../domains/reports/index.js";
+import { handleCategory } from "../domains/categories/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
 import { routeMessage } from "../routing/router.js";
 import { recordMessageTrace } from "../tracing.js";
@@ -17,6 +18,8 @@ export async function dispatchMessage(
       return handleExpense(deps, context);
     case "report":
       return handleReport(deps, context);
+    case "category":
+      return handleCategory(deps, context);
     case "ignore":
       return { kind: "silent" };
   }
