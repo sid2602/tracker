@@ -51,4 +51,43 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .addColumn("lease_token", "text")
     .addColumn("received_at", "integer", (col) => col.notNull())
     .execute();
+
+  await db.schema
+    .createTable("categories")
+    .ifNotExists()
+    .addColumn("name", "text", (col) => col.primaryKey())
+    .addColumn("created_at", "text", (col) => col.notNull())
+    .execute();
+
+  const existingCategories = await db
+    .selectFrom("categories")
+    .select("name")
+    .execute();
+
+  if (existingCategories.length === 0) {
+    const legacyCategories = [
+      "groceries",
+      "food",
+      "fuel",
+      "transport",
+      "home",
+      "bills",
+      "health",
+      "entertainment",
+      "other",
+    ];
+    const now = new Date().toISOString();
+    
+    if (legacyCategories.length > 0) {
+      await db
+        .insertInto("categories")
+        .values(
+          legacyCategories.map((name) => ({
+            name,
+            created_at: now,
+          }))
+        )
+        .execute();
+    }
+  }
 }

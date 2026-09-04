@@ -65,4 +65,16 @@ describe("routeMessage", () => {
       intent: "report",
     });
   });
+
+  it("handles category intent", async () => {
+    generateObjectMock.mockResolvedValue({
+      object: {
+        intent: "category",
+      },
+    });
+
+    await expect(routeMessage(config, "dodaj kategorie")).resolves.toEqual({
+      intent: "category",
+    });
+  });
 });

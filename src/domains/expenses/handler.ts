@@ -6,6 +6,7 @@ import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.
 import { parseExpenses } from "./parser.js";
 import { insertExpenses, type ExpenseInput } from "./repository.js";
 import type { ExpenseResult } from "./schema.js";
+import { getAllCategories } from "../categories/repository.js";
 
 export async function handleExpense(
   deps: AppDeps,
@@ -13,7 +14,8 @@ export async function handleExpense(
 ): Promise<HandlerResult> {
   try {
     const referenceDate = getReferenceDate(TIME_ZONE, deps.now?.() ?? new Date());
-    const parsed = await parseExpenses(deps.config, context.rawText, referenceDate);
+    const categories = await getAllCategories(deps.db);
+    const parsed = await parseExpenses(deps.config, context.rawText, referenceDate, categories);
     const expenses = mapParsedExpenses(parsed, context);
     const { inserted } = await insertExpenses(deps.db, expenses);
 

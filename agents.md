@@ -18,10 +18,12 @@ Always adhere to these rules when modifying or proposing code. Do not suggest al
 3. **LLM & AI Integration:**
    - **SDK:** Use the Vercel AI SDK (`ai` package).
    - **Gateway:** Use Vercel AI Gateway for LLM provider abstraction. Do not import `@ai-sdk/openai` or `@ai-sdk/anthropic` directly.
-   - **Routing:** Maintain the two-step routing architecture. Step 1: Router identifies intent (`expense`, `report`, `ignore`). Step 2: Domain handlers execute detailed LLM prompts.
+   - **Routing:** Maintain the two-step routing architecture. Step 1: Router identifies intent. Step 2: Domain handlers execute detailed LLM prompts.
+   - **CRITICAL**: Whenever you add a new domain or feature, you MUST remember to update both the router schema (`src/routing/schema.ts`) AND the router prompt (`src/routing/prompt.ts`) to explicitly describe the new intent to the LLM.
 
 4. **Testing & Validation:**
    - Use `vitest`. Ensure high test coverage for any new logic (especially parsers, routers, and DB operations).
+   - **CRITICAL**: Whenever you create a new domain, file, or feature, you MUST proactively write unit tests for it. Mimic the existing test structure (e.g. `*.test.ts`). Do not skip writing tests.
    - After making code changes, ALWAYS run `npm run verify` to ensure types and tests pass before declaring the task complete.
 
 5. **Code Structure (Domain Pattern):**

@@ -18,6 +18,14 @@ describe("routing schema", () => {
     ).toEqual({
       intent: "report",
     });
+
+    expect(
+      routerLlmSchema.parse({
+        intent: "category",
+      }),
+    ).toEqual({
+      intent: "category",
+    });
   });
 
   it("rejects unknown router intent", () => {
@@ -41,6 +49,14 @@ describe("routing schema", () => {
       }),
     ).toEqual({
       intent: "report",
+    });
+
+    expect(
+      toRouterResult({
+        intent: "category",
+      }),
+    ).toEqual({
+      intent: "category",
     });
   });
 });

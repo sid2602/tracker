@@ -27,7 +27,13 @@ export interface InboxTable {
   received_at: number;
 }
 
+export interface CategoryTable {
+  name: string;
+  created_at: string;
+}
+
 export interface AppDatabase {
   expenses: ExpenseTable;
   inbox: InboxTable;
+  categories: CategoryTable;
 }

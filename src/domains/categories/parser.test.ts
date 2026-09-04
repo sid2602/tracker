@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { parseExpenses } from "./parser.js";
+import { parseCategoryAction } from "./parser.js";
 
 const generateObjectMock = vi.fn();
 
@@ -25,7 +25,7 @@ const config: Config = {
   langfuseBaseUrl: "https://cloud.langfuse.com",
 };
 
-describe("parseExpenses", () => {
+describe("parseCategoryAction", () => {
   beforeEach(() => {
     generateObjectMock.mockReset();
   });
@@ -34,31 +34,14 @@ describe("parseExpenses", () => {
     generateObjectMock
       .mockRejectedValueOnce(new Error("invalid response"))
       .mockResolvedValueOnce({
-        object: {
-          items: [
-            {
-              amountCents: 1500,
-              currency: "PLN",
-              category: "groceries",
-              occurredOn: "2026-09-01",
-              note: "zakupy",
-            },
-          ],
-        },
+        object: { action: "add", categoryName: "pets" },
       });
 
     await expect(
-      parseExpenses(config, "zakupy 15 zl", "2026-09-01", ["groceries", "food"]),
+      parseCategoryAction(config, "add pets category"),
     ).resolves.toEqual({
-      items: [
-        {
-          amountCents: 1500,
-          currency: "PLN",
-          category: "groceries",
-          occurredOn: "2026-09-01",
-          note: "zakupy",
-        },
-      ],
+      action: "add",
+      categoryName: "pets",
     });
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);
@@ -68,7 +51,7 @@ describe("parseExpenses", () => {
     generateObjectMock.mockRejectedValue(new Error("invalid response"));
 
     await expect(
-      parseExpenses(config, "zakupy 15 zl", "2026-09-01", ["groceries", "food"]),
+      parseCategoryAction(config, "add something"),
     ).rejects.toThrow("invalid response");
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);
