@@ -1,35 +1,34 @@
-import { NO_EXPENSES, reportTitle } from "../../lib/messages.js";
-import type { ReportPeriod } from "../../lib/periods.js";
+import { NO_EXPENSES } from "../../lib/messages.js";
 import type { CategoryBucket, TotalBucket } from "./queries.js";
 
 function formatAmount(amountCents: number, currency: string): string {
   return `${(amountCents / 100).toFixed(2)} ${currency}`;
 }
 
-function wrapReport(period: ReportPeriod, bodyLines: string[]): string {
+function wrapReport(title: string, bodyLines: string[]): string {
   if (bodyLines.length === 0) {
-    return `${reportTitle(period)}\n\n${NO_EXPENSES}`;
+    return `📊 Report: ${title}\n\n${NO_EXPENSES}`;
   }
 
-  return `${reportTitle(period)}\n\n${bodyLines.join("\n")}`;
+  return `📊 Report: ${title}\n\n${bodyLines.join("\n")}`;
 }
 
 export function formatTotalReport(
-  period: ReportPeriod,
+  title: string,
   rows: TotalBucket[],
 ): string {
   return wrapReport(
-    period,
+    title,
     rows.map((row) => formatAmount(row.amountCents, row.currency)),
   );
 }
 
 export function formatCategoryReport(
-  period: ReportPeriod,
+  title: string,
   rows: CategoryBucket[],
 ): string {
   return wrapReport(
-    period,
+    title,
     rows.map(
       (row) => `${row.category}: ${formatAmount(row.amountCents, row.currency)}`,
     ),
