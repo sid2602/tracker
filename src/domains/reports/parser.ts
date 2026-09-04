@@ -6,11 +6,12 @@ import { reportParamsSchema, type ReportParams } from "./schema.js";
 export async function parseReport(
   config: Config,
   text: string,
+  currentDateStr: string,
 ): Promise<ReportParams> {
   const result = await generateStructured(
     config,
     reportParamsSchema,
-    getReportPrompt(text),
+    getReportPrompt(text, currentDateStr),
     "llm.report.parse",
   );
 

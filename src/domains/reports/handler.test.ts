@@ -21,12 +21,12 @@ const context = {
 };
 
 const parseReportMock = vi.fn<
-  (config: Config, text: string) => Promise<ReportParams>
+  (config: Config, text: string, currentDateStr: string) => Promise<ReportParams>
 >();
 
 vi.mock("./parser.js", () => ({
-  parseReport: (configArg: Config, text: string) =>
-    parseReportMock(configArg, text),
+  parseReport: (configArg: Config, text: string, currentDateStr: string) =>
+    parseReportMock(configArg, text, currentDateStr),
 }));
 
 const config: Config = {
@@ -74,9 +74,11 @@ describe("handleReport", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
-  it("returns empty this_month totals", async () => {
+  it("returns empty totals", async () => {
     parseReportMock.mockResolvedValue({
-      period: "this_month",
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "This month",
       group_by: "total",
     });
 
@@ -84,13 +86,13 @@ describe("handleReport", () => {
 
     expect(result).toEqual({
       kind: "success",
-      message: "📊 Report: this month\n\nno expenses",
+      message: "📊 Report: This month\n\nno expenses",
     });
   });
 
-  it("sums this_month totals per currency", async () => {
+  it("sums totals per currency for given date range", async () => {
     await insertExpenses(deps.db, [
-      createExpense({ itemIndex: 0, amountCents: 1500, currency: "PLN" }),
+      createExpense({ itemIndex: 0, amountCents: 1500, currency: "PLN", occurredOn: "2026-09-10" }),
       createExpense({
         itemIndex: 1,
         amountCents: 2000,
@@ -104,6 +106,7 @@ describe("handleReport", () => {
         amountCents: 1000,
         currency: "EUR",
         category: "food",
+        occurredOn: "2026-09-15",
       }),
       createExpense({
         sourceTimestamp: 1_700_000_000_002,
@@ -115,7 +118,9 @@ describe("handleReport", () => {
     ]);
 
     parseReportMock.mockResolvedValue({
-      period: "this_month",
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "Wrzesień 2026",
       group_by: "total",
     });
 
@@ -123,43 +128,18 @@ describe("handleReport", () => {
 
     expect(result).toEqual({
       kind: "success",
-      message: "📊 Report: this month\n\n10.00 EUR\n35.00 PLN",
+      message: "📊 Report: Wrzesień 2026\n\n10.00 EUR\n35.00 PLN",
     });
   });
 
-  it("sums last_month totals", async () => {
-    await insertExpenses(deps.db, [
-      createExpense({
-        amountCents: 700,
-        occurredOn: "2026-08-02",
-      }),
-      createExpense({
-        sourceTimestamp: 1_700_000_000_003,
-        amountCents: 1500,
-        occurredOn: "2026-09-10",
-      }),
-    ]);
-
-    parseReportMock.mockResolvedValue({
-      period: "last_month",
-      group_by: "total",
-    });
-
-    const result = await handleReport(deps, context);
-
-    expect(result).toEqual({
-      kind: "success",
-      message: "📊 Report: last month\n\n7.00 PLN",
-    });
-  });
-
-  it("groups this_month by category and currency", async () => {
+  it("groups by category and currency", async () => {
     await insertExpenses(deps.db, [
       createExpense({
         itemIndex: 0,
         amountCents: 1500,
         category: "groceries",
         currency: "PLN",
+        occurredOn: "2026-09-10",
       }),
       createExpense({
         itemIndex: 1,
@@ -174,18 +154,14 @@ describe("handleReport", () => {
         amountCents: 1000,
         category: "food",
         currency: "EUR",
-      }),
-      createExpense({
-        sourceTimestamp: 1_700_000_000_005,
-        itemIndex: 0,
-        amountCents: 300,
-        category: "food",
-        currency: "PLN",
+        occurredOn: "2026-09-11",
       }),
     ]);
 
     parseReportMock.mockResolvedValue({
-      period: "this_month",
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "This month",
       group_by: "category",
     });
 
@@ -194,7 +170,42 @@ describe("handleReport", () => {
     expect(result).toEqual({
       kind: "success",
       message:
-        "📊 Report: this month\n\nfood: 10.00 EUR\nfood: 3.00 PLN\ngroceries: 20.00 PLN",
+        "📊 Report: This month\n\nfood: 10.00 EUR\ngroceries: 20.00 PLN",
+    });
+  });
+
+  it("filters by category", async () => {
+    await insertExpenses(deps.db, [
+      createExpense({
+        itemIndex: 0,
+        amountCents: 1500,
+        category: "groceries",
+        currency: "PLN",
+        occurredOn: "2026-09-10",
+      }),
+      createExpense({
+        itemIndex: 1,
+        amountCents: 500,
+        category: "transport",
+        currency: "PLN",
+        occurredOn: "2026-09-12",
+      }),
+    ]);
+
+    parseReportMock.mockResolvedValue({
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "Transport this month",
+      group_by: "total",
+      categories: ["transport"],
+    });
+
+    const result = await handleReport(deps, context);
+
+    expect(result).toEqual({
+      kind: "success",
+      message:
+        "📊 Report: Transport this month\n\n5.00 PLN",
     });
   });
 });
