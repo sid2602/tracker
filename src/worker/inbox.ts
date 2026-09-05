@@ -166,8 +166,13 @@ export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
     logger.warn({ error, messageKey: item.message_key }, "Failed to process inbox item");
 
     const attempts = item.attempts + 1;
-    // Increase backoff to avoid hammering the API if 429 occurs (10s, 20s, 40s, 80s)
-    const backoffMs = Math.pow(2, attempts) * 5000;
+    // Increase backoff to avoid hammering the API if 429 occurs (30s, 60s, 120s, 240s)
+    const backoffMs = Math.pow(2, attempts) * 15000;
+
+    logger.info(
+      { messageKey: item.message_key, attempts, nextAttemptAt: new Date(nowMs + backoffMs).toISOString(), backoffMs },
+      "Scheduling retry for inbox item"
+    );
 
     await deps.db
       .updateTable("inbox")
