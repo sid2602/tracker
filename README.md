@@ -24,3 +24,17 @@ To run evaluation tests for a specific domain to save tokens (e.g. `modification
 ```bash
 RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/domains/modifications/parser.eval.test.ts
 ```
+
+## Deployment (Moving to a new device)
+
+When migrating the project to a new device (like a Raspberry Pi), ensure you copy the entire project directory, paying special attention to the secrets and configuration files:
+
+1. **`.env` file**: Must contain all your API keys and configuration.
+2. **`rclone.conf` file**: Must exist as a text file in the project root. 
+   > **⚠️ CRITICAL DOCKER QUIRK:** If you delete `rclone.conf` and run `docker compose up -d`, Docker will automatically create an **empty folder** named `rclone.conf` instead of a file, which will break the Rclone container. Always ensure `rclone.conf` is copied over as a physical text file (even if it's empty) before starting Docker.
+
+To start the system on the new device:
+```bash
+docker compose up -d
+```
+(This will automatically start the Signal client, the Node.js worker, the Ofelia scheduler, and the Rclone backup service).
