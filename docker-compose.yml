@@ -27,7 +27,7 @@ services:
       - ./data:/app/data
     labels:
       - "ofelia.enabled=true"
-      - "ofelia.job-exec.sqlite-backup.schedule=0 3 * * 0"
+      - "ofelia.job-exec.sqlite-backup.schedule=0 0 3 * * 0"
       - "ofelia.job-exec.sqlite-backup.command=sh -c 'sqlite3 /app/data/expenses.db \".backup /app/data/backup_expenses_$$(date +%F).db\"'"
 
   ofelia:
@@ -50,5 +50,5 @@ services:
       - ./rclone.conf:/config/rclone/rclone.conf:ro
     labels:
       - "ofelia.enabled=true"
-      - "ofelia.job-exec.cloud-sync.schedule=0 4 * * 0"
+      - "ofelia.job-exec.cloud-sync.schedule=0 0 4 * * 0"
       - "ofelia.job-exec.cloud-sync.command=rclone copy /data ${BACKUP_REMOTE_NAME:-gdrive}:/TrackerBackups"
