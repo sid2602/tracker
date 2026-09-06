@@ -38,3 +38,15 @@ To start the system on the new device:
 docker compose up -d
 ```
 (This will automatically start the Signal client, the Node.js worker, the Ofelia scheduler, and the Rclone backup service).
+
+### Clearing Pending Messages (Flushing the Queue)
+
+When migrating to a new device or restarting after a long downtime, the Signal server might try to deliver a large backlog of old test messages as soon as `signal-cli` connects.
+
+To manually receive and discard all pending messages, run these commands from the project root:
+
+```bash
+docker compose stop
+docker compose run --rm signal-cli --config /var/lib/signal-cli -u ${SIGNAL_PHONE_NUMBER} receive --ignore-attachments
+docker compose up -d
+```
