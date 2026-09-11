@@ -23,6 +23,10 @@ const MAX_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 1_000;
 const RETRY_BASE_DELAY_MS = 15_000;
 
+export type InboxProcessorOptions = {
+  beforeClaim?: (messageKey: string) => Promise<void>;
+};
+
 export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void> {
   const context = parseEnvelope(payload);
   if (!context) {
@@ -58,7 +62,10 @@ export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void
   );
 }
 
-export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
+export async function processNextInboxItem(
+  deps: AppDeps,
+  options: InboxProcessorOptions = {},
+): Promise<boolean> {
   const now = deps.now?.() ?? new Date();
   const nowMs = now.getTime();
   const leaseToken = randomUUID();
@@ -87,6 +94,8 @@ export async function processNextInboxItem(deps: AppDeps): Promise<boolean> {
   if (!target) {
     return false;
   }
+
+  await options.beforeClaim?.(target.message_key);
 
   const claimed = await deps.db
     .updateTable("inbox")

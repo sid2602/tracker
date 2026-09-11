@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { Kysely, SqliteDialect } from "kysely";
+import { Kysely, SqliteDialect, sql } from "kysely";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import type { AppDatabase } from "./schema.js";
@@ -31,11 +31,6 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .addColumn("note", "text", (col) => col.notNull())
     .addColumn("raw_text", "text", (col) => col.notNull())
     .addColumn("created_at", "text", (col) => col.notNull())
-    .addUniqueConstraint("expenses_source_item_unique", [
-      "source_author",
-      "source_timestamp",
-      "item_index",
-    ])
     .execute();
 
   await db.schema
@@ -76,6 +71,8 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
   if (inboxTable && !inboxTable.columns.find((c) => c.name === "failed_at")) {
     await db.schema.alterTable("inbox").addColumn("failed_at", "integer").execute();
   }
+
+  await migrateLegacyExpenseUniqueConstraint(db);
 
   await db.schema
     .createIndex("expenses_message_item_unique_v2")
@@ -136,4 +133,119 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
         .execute();
     }
   }
+}
+
+type SqliteIndexRow = {
+  name: string;
+  unique: number;
+  origin: string;
+};
+
+type SqliteIndexColumn = {
+  name: string;
+};
+
+type DuplicateExpenseMessage = {
+  source_message_key: string;
+  item_index: number;
+};
+
+async function migrateLegacyExpenseUniqueConstraint(
+  db: Kysely<AppDatabase>,
+): Promise<void> {
+  const indexes = await sql<SqliteIndexRow>`PRAGMA index_list('expenses')`.execute(db);
+
+  for (const index of indexes.rows) {
+    if (index.unique !== 1 || index.origin !== "u") {
+      continue;
+    }
+
+    const escapedName = index.name.replaceAll('"', '""');
+    const columns = await sql<SqliteIndexColumn>`
+      PRAGMA index_info(${sql.raw(`"${escapedName}"`)})
+    `.execute(db);
+    const columnNames = columns.rows.map((column) => column.name);
+
+    if (
+      columnNames.length === 3 &&
+      columnNames[0] === "source_author" &&
+      columnNames[1] === "source_timestamp" &&
+      columnNames[2] === "item_index"
+    ) {
+      await rebuildExpensesWithoutLegacyUniqueConstraint(db);
+      return;
+    }
+  }
+}
+
+async function rebuildExpensesWithoutLegacyUniqueConstraint(
+  db: Kysely<AppDatabase>,
+): Promise<void> {
+  await db.transaction().execute(async (trx) => {
+    const duplicateMessage = await sql<DuplicateExpenseMessage>`
+      SELECT "source_message_key", "item_index"
+      FROM "expenses"
+      WHERE "source_message_key" IS NOT NULL
+      GROUP BY "source_message_key", "item_index"
+      HAVING COUNT(*) > 1
+      LIMIT 1
+    `.execute(trx);
+
+    const duplicate = duplicateMessage.rows[0];
+    if (duplicate) {
+      throw new Error(
+        `Cannot migrate expenses: duplicate source_message_key "${duplicate.source_message_key}" ` +
+        `for item_index ${duplicate.item_index}`,
+      );
+    }
+
+    await sql`ALTER TABLE "expenses" RENAME TO "expenses_legacy"`.execute(trx);
+    await sql`
+      CREATE TABLE "expenses" (
+        "id" INTEGER PRIMARY KEY,
+        "source_message_key" TEXT,
+        "source_author" TEXT NOT NULL,
+        "source_timestamp" INTEGER NOT NULL,
+        "item_index" INTEGER NOT NULL,
+        "amount_cents" INTEGER NOT NULL,
+        "currency" TEXT NOT NULL DEFAULT 'PLN',
+        "category" TEXT NOT NULL,
+        "occurred_on" TEXT NOT NULL,
+        "note" TEXT NOT NULL,
+        "raw_text" TEXT NOT NULL,
+        "created_at" TEXT NOT NULL
+      )
+    `.execute(trx);
+    await sql`
+      INSERT INTO "expenses" (
+        "id",
+        "source_message_key",
+        "source_author",
+        "source_timestamp",
+        "item_index",
+        "amount_cents",
+        "currency",
+        "category",
+        "occurred_on",
+        "note",
+        "raw_text",
+        "created_at"
+      )
+      SELECT
+        "id",
+        "source_message_key",
+        "source_author",
+        "source_timestamp",
+        "item_index",
+        "amount_cents",
+        "currency",
+        "category",
+        "occurred_on",
+        "note",
+        "raw_text",
+        "created_at"
+      FROM "expenses_legacy"
+    `.execute(trx);
+    await sql`DROP TABLE "expenses_legacy"`.execute(trx);
+  });
 }

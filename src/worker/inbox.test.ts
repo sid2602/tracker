@@ -335,6 +335,45 @@ describe("inbox", () => {
     expect(analyzeMessageMock).not.toHaveBeenCalled();
   });
 
+  it("allows only one concurrent processor to claim an item", async () => {
+    await saveToInbox(deps, validPayload);
+
+    let selectedProcessors = 0;
+    let markBothSelected: (() => void) | undefined;
+    let releaseClaims: (() => void) | undefined;
+    const bothSelected = new Promise<void>((resolve) => {
+      markBothSelected = resolve;
+    });
+    const claimsReleased = new Promise<void>((resolve) => {
+      releaseClaims = resolve;
+    });
+    const beforeClaim = async () => {
+      selectedProcessors += 1;
+      if (selectedProcessors === 2) {
+        markBothSelected?.();
+      }
+      await claimsReleased;
+    };
+    analyzeMessageMock.mockResolvedValue(expenseAnalysis);
+    persistAnalyzedMessageMock.mockResolvedValue({
+      kind: "success",
+      message: "Only once",
+    });
+
+    const firstProcessor = processNextInboxItem(deps, { beforeClaim });
+    const secondProcessor = processNextInboxItem(deps, { beforeClaim });
+    await bothSelected;
+
+    if (!releaseClaims) {
+      throw new Error("Claim release callback was not initialized");
+    }
+    releaseClaims();
+    const results = await Promise.all([firstProcessor, secondProcessor]);
+    expect(results.filter((result) => result)).toHaveLength(1);
+    expect(analyzeMessageMock).toHaveBeenCalledTimes(1);
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+  });
+
   it("picks up items if their lease has expired", async () => {
     await saveToInbox(deps, validPayload);
     await db

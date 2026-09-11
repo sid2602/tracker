@@ -17,24 +17,21 @@ export async function generateStructured<T>(
   try {
     return await withLlmSpan(operation, config, prompt, async () => {
       const result = await withRetry(async () => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+        const generated = await withAbortTimeout(
+          (signal) =>
+            generateObject({
+              model: getModel(config),
+              schema,
+              prompt,
+              abortSignal: signal,
+            }),
+          LLM_TIMEOUT_MS,
+        );
 
-        try {
-          const generated = await generateObject({
-            model: getModel(config),
-            schema,
-            prompt,
-            abortSignal: controller.signal,
-          });
-
-          return {
-            value: generated.object,
-            usage: generated.usage,
-          };
-        } finally {
-          clearTimeout(timeoutId);
-        }
+        return {
+          value: generated.object,
+          usage: generated.usage,
+        };
       });
 
       return result;
@@ -53,6 +50,24 @@ export async function generateStructured<T>(
     }
 
     throw error;
+  }
+}
+
+/**
+ * AbortSignal cancellation is cooperative: the wrapped operation must honor
+ * the signal. The Vercel AI SDK forwards this signal to the provider request.
+ */
+export async function withAbortTimeout<T>(
+  operation: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+): Promise<T> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await operation(controller.signal);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
