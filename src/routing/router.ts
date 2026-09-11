@@ -1,6 +1,7 @@
 import type { Config } from "../config.js";
 import { generateStructured } from "../llm/generate.js";
 import { getRouterPrompt } from "./prompt.js";
+import { ROUTING_CARDS } from "./registry.js";
 import {
   routerLlmSchema,
   toRouterResult,
@@ -14,7 +15,7 @@ export async function routeMessage(
   const raw = await generateStructured(
     config,
     routerLlmSchema,
-    getRouterPrompt(text),
+    getRouterPrompt(text, ROUTING_CARDS),
     "llm.router",
   );
 
