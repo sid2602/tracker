@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { logger } from "../lib/logger.js";
-import { parseEnvelope } from "../signal/index.js";
+import { classifyEnvelope } from "../signal/index.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
 import {
   analyzeMessage,
@@ -22,17 +22,31 @@ const LEASE_DURATION_MS = 10 * 60_000;
 const MAX_ATTEMPTS = 5;
 const POLL_INTERVAL_MS = 1_000;
 const RETRY_BASE_DELAY_MS = 15_000;
+const SELF_ECHO_IGNORED_REASON = "self_echo_ignored";
+const SELF_ECHO_REVIEW_REASON = "self_echo_requires_manual_review";
+
+type InboxStatus =
+  | "pending"
+  | "analyzed"
+  | "saved"
+  | "confirmed"
+  | "ignored"
+  | "failed";
 
 export type InboxProcessorOptions = {
   beforeClaim?: (messageKey: string) => Promise<void>;
 };
 
 export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void> {
-  const context = parseEnvelope(payload);
-  if (!context) {
-    logger.warn({ payload }, "saveToInbox: parseEnvelope failed to parse payload");
+  const classification = classifyEnvelope(payload, {
+    selfNumber: deps.config.signalPhoneNumber,
+    allowedInputDeviceIds: deps.config.signalAllowedInputDeviceIds,
+  });
+  if (classification.kind !== "inbound") {
+    logger.info({ kind: classification.kind }, "Ignoring non-inbound Signal payload");
     return;
   }
+  const context = classification.context;
 
   const rawEnvelope = JSON.stringify(payload);
   if (!rawEnvelope) {
@@ -139,10 +153,22 @@ export async function processNextInboxItem(
   let messageContext: MessageContext | null = null;
 
   try {
-    const parsedContext = deserializeMessageContext(item.raw_envelope);
-    if (!parsedContext) {
+    const storedMessage = deserializeStoredMessage(item.raw_envelope, {
+      selfNumber: deps.config.signalPhoneNumber,
+      allowedInputDeviceIds: deps.config.signalAllowedInputDeviceIds,
+    });
+    if (storedMessage.kind === "self_echo") {
+      await handleHistoricalSelfEcho(deps, item, leaseToken);
+      return true;
+    }
+    if (storedMessage.kind === "quarantine") {
+      await quarantineHistoricalMessage(deps, item, leaseToken);
+      return true;
+    }
+    if (storedMessage.kind === "invalid") {
       throw new Error("Could not deserialize stored Signal payload");
     }
+    const parsedContext = storedMessage.context;
     messageContext = parsedContext;
 
     await withMessageTrace(
@@ -268,6 +294,103 @@ export async function processNextInboxItem(
   }
 
   return true;
+}
+
+async function handleHistoricalSelfEcho(
+  deps: AppDeps,
+  item: {
+    message_key: string;
+    status: InboxStatus;
+  },
+  leaseToken: string,
+): Promise<void> {
+  if (item.status === "saved") {
+    const quarantined = await deps.db
+      .updateTable("inbox")
+      .set({
+        status: "failed",
+        last_error: SELF_ECHO_REVIEW_REASON,
+        failed_at: (deps.now?.() ?? new Date()).getTime(),
+        next_attempt_at: null,
+        lease_token: null,
+        lease_until: null,
+      })
+      .where("message_key", "=", item.message_key)
+      .where("status", "=", "saved")
+      .where("lease_token", "=", leaseToken)
+      .executeTakeFirst();
+
+    if (quarantined.numUpdatedRows === 0n) {
+      throw new Error("Inbox lease was lost while quarantining self-echo");
+    }
+
+    logger.warn(
+      { messageKey: item.message_key },
+      "Historical saved self-echo quarantined for manual review",
+    );
+    return;
+  }
+
+  if (item.status !== "pending" && item.status !== "analyzed") {
+    throw new Error(`Cannot clean up self-echo in ${item.status} state`);
+  }
+
+  const ignored = await deps.db
+    .updateTable("inbox")
+    .set({
+      status: "ignored",
+      parsed_json: serializeMessageAnalysis({
+        version: 1,
+        intent: "ignore",
+      }),
+      response_text: null,
+      last_error: SELF_ECHO_IGNORED_REASON,
+      failed_at: null,
+      next_attempt_at: null,
+      lease_token: null,
+      lease_until: null,
+    })
+    .where("message_key", "=", item.message_key)
+    .where("status", "in", ["pending", "analyzed"])
+    .where("lease_token", "=", leaseToken)
+    .executeTakeFirst();
+
+  if (ignored.numUpdatedRows === 0n) {
+    throw new Error("Inbox lease was lost while ignoring self-echo");
+  }
+}
+
+async function quarantineHistoricalMessage(
+  deps: AppDeps,
+  item: {
+    message_key: string;
+    status: InboxStatus;
+  },
+  leaseToken: string,
+): Promise<void> {
+  const quarantined = await deps.db
+    .updateTable("inbox")
+    .set({
+      status: "failed",
+      last_error: "legacy_self_account_device_unknown",
+      failed_at: (deps.now?.() ?? new Date()).getTime(),
+      next_attempt_at: null,
+      lease_token: null,
+      lease_until: null,
+    })
+    .where("message_key", "=", item.message_key)
+    .where("status", "=", item.status)
+    .where("lease_token", "=", leaseToken)
+    .executeTakeFirst();
+
+  if (quarantined.numUpdatedRows === 0n) {
+    throw new Error("Inbox lease was lost while quarantining legacy message");
+  }
+
+  logger.warn(
+    { messageKey: item.message_key },
+    "Legacy self-account message quarantined for manual review",
+  );
 }
 
 async function deliverSavedItem(
@@ -412,14 +535,76 @@ async function scheduleRetry(
   );
 }
 
-function deserializeMessageContext(rawEnvelope: string): MessageContext | null {
+type StoredMessage =
+  | { kind: "inbound"; context: MessageContext }
+  | { kind: "self_echo" }
+  | { kind: "quarantine" }
+  | { kind: "invalid" };
+
+function deserializeStoredMessage(
+  rawEnvelope: string,
+  envelopeOptions: {
+    selfNumber?: string;
+    allowedInputDeviceIds?: readonly number[];
+  },
+): StoredMessage {
   try {
     const parsed: unknown = JSON.parse(rawEnvelope);
+    const classification = classifyEnvelope(parsed, envelopeOptions);
+    if (classification.kind === "self_echo") {
+      return { kind: "self_echo" };
+    }
+    if (classification.kind === "inbound") {
+      return { kind: "inbound", context: classification.context };
+    }
+
     const legacyContext = parseLegacyMessageContext(parsed);
-    return legacyContext ?? parseEnvelope(parsed);
+    if (!legacyContext) {
+      return { kind: "invalid" };
+    }
+
+    if (
+      envelopeOptions.selfNumber !== undefined &&
+      legacyContext.sourceAuthor === envelopeOptions.selfNumber
+    ) {
+      const legacySourceDevice = parseLegacySourceDevice(legacyContext);
+      if (legacySourceDevice === null) {
+        return { kind: "quarantine" };
+      }
+      if (
+        envelopeOptions.allowedInputDeviceIds === undefined ||
+        !envelopeOptions.allowedInputDeviceIds.includes(legacySourceDevice)
+      ) {
+        return { kind: "self_echo" };
+      }
+    }
+
+    return { kind: "inbound", context: legacyContext };
   } catch {
+    return { kind: "invalid" };
+  }
+}
+
+function parseLegacySourceDevice(context: MessageContext): number | null {
+  const prefix = `${context.sourceAuthor}-`;
+  const suffix = `-${context.sourceTimestamp}`;
+  if (
+    !context.messageKey.startsWith(prefix) ||
+    !context.messageKey.endsWith(suffix)
+  ) {
     return null;
   }
+
+  const serializedDevice = context.messageKey.slice(
+    prefix.length,
+    context.messageKey.length - suffix.length,
+  );
+  if (!/^\d+$/.test(serializedDevice)) {
+    return null;
+  }
+
+  const deviceId = Number(serializedDevice);
+  return Number.isSafeInteger(deviceId) && deviceId > 0 ? deviceId : null;
 }
 
 function parseLegacyMessageContext(value: unknown): MessageContext | null {

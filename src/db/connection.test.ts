@@ -1,14 +1,75 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import { initSchema, openDatabase } from "./connection.js";
 import type { AppDatabase } from "./schema.js";
 import { insertExpenses } from "../domains/expenses/repository.js";
+
+type IndexRow = {
+  name: string;
+  unique: number;
+};
+
+type IndexColumn = {
+  name: string;
+};
 
 describe("database migrations", () => {
   let db: Kysely<AppDatabase> | undefined;
 
   afterEach(async () => {
     await db?.destroy();
+  });
+
+  async function assertIndex(
+    table: "expenses" | "inbox",
+    name: string,
+    unique: number,
+    columns: string[],
+  ): Promise<void> {
+    if (!db) {
+      throw new Error("Database was not initialized");
+    }
+
+    const indexes = await sql<IndexRow>`
+      PRAGMA index_list(${sql.raw(`"${table}"`)})
+    `.execute(db);
+    const index = indexes.rows.find((candidate) => candidate.name === name);
+    expect(index?.unique).toBe(unique);
+
+    const escapedName = name.replaceAll('"', '""');
+    const indexColumns = await sql<IndexColumn>`
+      PRAGMA index_info(${sql.raw(`"${escapedName}"`)})
+    `.execute(db);
+    expect(indexColumns.rows.map((column) => column.name)).toEqual(columns);
+  }
+
+  async function assertRequiredIndexes(): Promise<void> {
+    await assertIndex(
+      "inbox",
+      "inbox_processing_idx",
+      0,
+      ["status", "next_attempt_at", "lease_until"],
+    );
+    await assertIndex(
+      "expenses",
+      "expenses_reporting_idx",
+      0,
+      ["occurred_on", "category", "currency"],
+    );
+    await assertIndex(
+      "expenses",
+      "expenses_message_item_unique_v2",
+      1,
+      ["source_message_key", "item_index"],
+    );
+  }
+
+  it("creates the queue and reporting indexes on a fresh database", async () => {
+    db = openDatabase(":memory:");
+
+    await initSchema(db);
+
+    await assertRequiredIndexes();
   });
 
   it("removes the legacy expense uniqueness constraint", async () => {
@@ -81,6 +142,7 @@ describe("database migrations", () => {
 
     await initSchema(db);
     await initSchema(db);
+    await assertRequiredIndexes();
 
     const result = await insertExpenses(db, [
       {
@@ -180,6 +242,7 @@ describe("database migrations", () => {
       .execute();
 
     await initSchema(db);
+    await assertRequiredIndexes();
 
     const legacyExpense = await db
       .selectFrom("expenses")

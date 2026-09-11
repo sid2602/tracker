@@ -62,6 +62,19 @@ pending/analyzed --------> saved (user feedback)
      through `saved` to `confirmed`; this may be a direct `pending` or
      `analyzed` to `saved` transition when no domain command can be produced
      and no business side effect is needed.
+   - Signal receive payloads are classified as inbound, self-echo, or
+     irrelevant/invalid. A valid `dataMessage` takes precedence over
+     `syncMessage.sentMessage`; self-chat `syncMessage.sentMessage` events are
+     inbound only when their destination and source are the configured account
+     and their source device is in the configured input-device allowlist.
+     Historical
+     normalized rows are checked against the device encoded in their legacy
+     message key; unparseable self-account rows are quarantined for review.
+   - New self-echo payloads are ignored before they enter the inbox. Historical
+     `pending` and `analyzed` self-echo rows transition to `ignored` with a
+     `self_echo` diagnostic and no LLM or domain processing. A historical
+     `saved` self-echo transitions to terminal `failed` quarantine for manual
+     review; its persisted domain effect is not rolled back or replayed.
    - Technical errors from the LLM, router, database, lease ownership, or
      Signal transport remain retryable and must not be converted into
      successful confirmation.
@@ -118,4 +131,7 @@ The implementation must include tests for:
 - long-running lease recovery;
 - transition to `failed` after the retry limit;
 - raw-payload round trips and duplicate replay;
+- self-echo filtering, legacy self-echo cleanup, and preservation of legacy
+  normalized inbox payloads;
+- fresh and migrated queue/reporting index presence;
 - all supported routing intents.

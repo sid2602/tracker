@@ -72,7 +72,8 @@ describe("inbox", () => {
       config: {
         signalRpcHost: "signal-cli-rest-api",
         signalRpcPort: 6001,
-        signalPhoneNumber: "+123",
+        signalPhoneNumber: "+15005550100",
+        signalAllowedInputDeviceIds: [1],
         llmProvider: "openai",
         llmModel: "gpt",
         databasePath: ":memory:",
@@ -96,6 +97,36 @@ describe("inbox", () => {
     },
   };
 
+  const selfEchoPayload = {
+    envelope: {
+      source: "+15005550100",
+      sourceDevice: 2,
+      timestamp: 1_700_000_000_001,
+      syncMessage: {
+        sentMessage: {
+          destinationNumber: "+15005550100",
+          timestamp: 1_700_000_000_001,
+          message: "Saved 1 item",
+        },
+      },
+    },
+  };
+
+  const selfChatPayload = {
+    envelope: {
+      source: "+15005550100",
+      sourceDevice: 1,
+      timestamp: 1_700_000_000_002,
+      syncMessage: {
+        sentMessage: {
+          destinationNumber: "+15005550100",
+          timestamp: 1_700_000_000_002,
+          message: "cocoa 10 pln",
+        },
+      },
+    },
+  };
+
   const expenseAnalysis: MessageAnalysis = {
     version: 1,
     intent: "expense",
@@ -112,6 +143,31 @@ describe("inbox", () => {
     },
   };
 
+  async function insertLegacySelfEcho(
+    status: "pending" | "analyzed" | "saved",
+  ): Promise<void> {
+    const sourceTimestamp = 1_700_000_000_010;
+    const context = {
+      messageKey: `+15005550100-2-${sourceTimestamp}`,
+      sourceAuthor: "+15005550100",
+      sourceTimestamp,
+      rawText: "Saved 1 item",
+    };
+
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: context.messageKey,
+        raw_envelope: JSON.stringify(context),
+        status,
+        parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
+        response_text: status === "saved" ? "Already saved" : null,
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+  }
+
   it("saves the original payload to the inbox", async () => {
     await saveToInbox(deps, validPayload);
 
@@ -121,6 +177,199 @@ describe("inbox", () => {
     expect(items[0]?.status).toBe("pending");
     expect(items[0]?.raw_envelope).toBe(JSON.stringify(validPayload));
     expect(items[0]?.received_at).toBe(mockNowMs);
+  });
+
+  it("does not persist a new sync sentMessage self-echo", async () => {
+    await saveToInbox(deps, selfEchoPayload);
+
+    const items = await db.selectFrom("inbox").selectAll().execute();
+    expect(items).toHaveLength(0);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("persists self-chat input from the user device", async () => {
+    await saveToInbox(deps, selfChatPayload);
+
+    const items = await db.selectFrom("inbox").selectAll().execute();
+    expect(items).toHaveLength(1);
+    expect(items[0]?.message_key).toBe("+15005550100-1-1700000000002");
+    expect(items[0]?.raw_envelope).toBe(JSON.stringify(selfChatPayload));
+  });
+
+  it("marks a historical pending self-echo as ignored without processing it", async () => {
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: "+15005550100-1-1700000000001",
+        raw_envelope: JSON.stringify(selfEchoPayload),
+        status: "pending",
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.parsed_json).toBe(JSON.stringify({ version: 1, intent: "ignore" }));
+    expect(item.last_error).toBe("self_echo_ignored");
+    expect(item.lease_token).toBeNull();
+    expect(item.lease_until).toBeNull();
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("marks a historical analyzed self-echo as ignored without processing it", async () => {
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: "+15005550100-1-1700000000001",
+        raw_envelope: JSON.stringify(selfEchoPayload),
+        status: "analyzed",
+        parsed_json: JSON.stringify(expenseAnalysis),
+        attempts: 1,
+        received_at: mockNowMs,
+      })
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.parsed_json).toBe(JSON.stringify({ version: 1, intent: "ignore" }));
+    expect(item.last_error).toBe("self_echo_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines a historical saved self-echo without replaying its effect", async () => {
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: "+15005550100-1-1700000000001",
+        raw_envelope: JSON.stringify(selfEchoPayload),
+        status: "saved",
+        parsed_json: JSON.stringify(expenseAnalysis),
+        response_text: "Already saved",
+        attempts: 2,
+        received_at: mockNowMs,
+      })
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("failed");
+    expect(item.last_error).toBe("self_echo_requires_manual_review");
+    expect(item.failed_at).toBe(mockNowMs);
+    expect(item.parsed_json).toBe(JSON.stringify(expenseAnalysis));
+    expect(item.response_text).toBe("Already saved");
+    expect(item.attempts).toBe(2);
+    expect(item.lease_token).toBeNull();
+    expect(item.lease_until).toBeNull();
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a legacy normalized pending self-echo", async () => {
+    await insertLegacySelfEcho("pending");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.last_error).toBe("self_echo_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a legacy normalized analyzed self-echo", async () => {
+    await insertLegacySelfEcho("analyzed");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.last_error).toBe("self_echo_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines a legacy normalized saved self-echo", async () => {
+    await insertLegacySelfEcho("saved");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("failed");
+    expect(item.last_error).toBe("self_echo_requires_manual_review");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines an unparseable legacy self-account payload", async () => {
+    const legacyContext = {
+      messageKey: "legacy-message",
+      sourceAuthor: "+15005550100",
+      sourceTimestamp: 1_700_000_000_011,
+      rawText: "unknown legacy message",
+    };
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: legacyContext.messageKey,
+        raw_envelope: JSON.stringify(legacyContext),
+        status: "pending",
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("failed");
+    expect(item.last_error).toBe("legacy_self_account_device_unknown");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("replays legacy normalized inbox payloads after envelope classification", async () => {
+    const legacyContext = {
+      messageKey: "+15005550100-1-1700000000002",
+      sourceAuthor: "+15005550100",
+      sourceTimestamp: 1_700_000_000_002,
+      rawText: "legacy expense",
+    };
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: legacyContext.messageKey,
+        raw_envelope: JSON.stringify(legacyContext),
+        status: "pending",
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+    analyzeMessageMock.mockResolvedValue(expenseAnalysis);
+    persistAnalyzedMessageMock.mockResolvedValue({
+      kind: "success",
+      message: "Legacy saved",
+    });
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("confirmed");
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      deps.config,
+      legacyContext.sourceAuthor,
+      "Legacy saved",
+    );
   });
 
   it("analyzes, persists, delivers, and confirms a pending item", async () => {

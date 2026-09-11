@@ -5,6 +5,31 @@ const LLM_PROVIDERS = ["openai", "anthropic"] as const;
 
 export type LlmProvider = (typeof LLM_PROVIDERS)[number];
 
+const signalDeviceIdsSchema = z
+  .string()
+  .min(1)
+  .transform((raw, ctx) => {
+    const parts = raw.split(",").map((part) => part.trim());
+    if (parts.some((part) => part.length === 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Signal device IDs must be comma-separated positive integers",
+      });
+      return z.NEVER;
+    }
+
+    const ids = parts.map((part) => Number(part));
+    if (ids.some((id) => !Number.isInteger(id) || id < 1)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Signal device IDs must be comma-separated positive integers",
+      });
+      return z.NEVER;
+    }
+
+    return [...new Set(ids)];
+  });
+
 const configSchema = z.object({
   AI_GATEWAY_API_KEY: z.string().min(1),
   LLM_PROVIDER: z.enum(LLM_PROVIDERS),
@@ -13,6 +38,7 @@ const configSchema = z.object({
   SIGNAL_RPC_HOST: z.string().min(1),
   SIGNAL_RPC_PORT: z.coerce.number().int().positive(),
   SIGNAL_PHONE_NUMBER: z.string().min(1),
+  SIGNAL_ALLOWED_INPUT_DEVICE_IDS: signalDeviceIdsSchema,
   LANGFUSE_PUBLIC_KEY: z.string().trim().min(1).nullable().default(null),
   LANGFUSE_SECRET_KEY: z.string().trim().min(1).nullable().default(null),
   LANGFUSE_BASE_URL: z.string().url().default("https://cloud.langfuse.com"),
@@ -26,6 +52,7 @@ export type Config = {
   signalRpcHost: string;
   signalRpcPort: number;
   signalPhoneNumber: string;
+  signalAllowedInputDeviceIds: number[];
   langfusePublicKey: string | null;
   langfuseSecretKey: string | null;
   langfuseBaseUrl: string;
@@ -49,6 +76,7 @@ export function loadConfig(): Config {
     signalRpcHost: parsed.SIGNAL_RPC_HOST,
     signalRpcPort: parsed.SIGNAL_RPC_PORT,
     signalPhoneNumber: parsed.SIGNAL_PHONE_NUMBER,
+    signalAllowedInputDeviceIds: parsed.SIGNAL_ALLOWED_INPUT_DEVICE_IDS,
     langfusePublicKey: parsed.LANGFUSE_PUBLIC_KEY,
     langfuseSecretKey: parsed.LANGFUSE_SECRET_KEY,
     langfuseBaseUrl: parsed.LANGFUSE_BASE_URL,

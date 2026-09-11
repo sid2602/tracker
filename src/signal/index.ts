@@ -1,4 +1,4 @@
-export { parseEnvelope } from "./envelope.js";
+export { classifyEnvelope, parseEnvelope } from "./envelope.js";
 export {
   listenForMessages,
   sendMessage,

@@ -26,6 +26,7 @@ const config: Config = {
   signalRpcHost: "signal-cli-rest-api",
   signalRpcPort: 6001,
   signalPhoneNumber: "+15005550100",
+  signalAllowedInputDeviceIds: [1],
   langfusePublicKey: null,
   langfuseSecretKey: null,
   langfuseBaseUrl: "https://cloud.langfuse.com",

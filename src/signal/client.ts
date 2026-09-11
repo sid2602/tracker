@@ -116,16 +116,7 @@ export async function sendMessage(
     });
 
     const id = randomUUID();
-    const payload = {
-      jsonrpc: "2.0",
-      method: "send",
-      params: {
-        message,
-        recipient: [recipient],
-        notifySelf: true,
-      },
-      id,
-    };
+    const payload = buildSendPayload(id, recipient, message);
 
     socket.on("connect", () => {
       socket.write(JSON.stringify(payload) + "\n");
@@ -168,4 +159,30 @@ export async function sendMessage(
       reject(new Error("Send command timed out"));
     }, 10000);
   });
+}
+
+export function buildSendPayload(
+  id: string,
+  recipient: string,
+  message: string,
+): {
+  jsonrpc: "2.0";
+  method: "send";
+  params: {
+    message: string;
+    recipient: string[];
+    notifySelf: true;
+  };
+  id: string;
+} {
+  return {
+    jsonrpc: "2.0",
+    method: "send",
+    params: {
+      message,
+      recipient: [recipient],
+      notifySelf: true,
+    },
+    id,
+  };
 }

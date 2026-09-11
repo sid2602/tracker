@@ -21,6 +21,7 @@ async function main(): Promise<void> {
     {
       db: config.databasePath,
       model: `${config.llmProvider}/${config.llmModel}`,
+      signalAllowedInputDeviceIds: config.signalAllowedInputDeviceIds,
       tracing: config.langfusePublicKey && config.langfuseSecretKey ? "on" : "off",
     },
     "worker started",
