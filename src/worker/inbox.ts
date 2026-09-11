@@ -24,6 +24,8 @@ const POLL_INTERVAL_MS = 1_000;
 const RETRY_BASE_DELAY_MS = 15_000;
 const SELF_ECHO_IGNORED_REASON = "self_echo_ignored";
 const SELF_ECHO_REVIEW_REASON = "self_echo_requires_manual_review";
+const UNAUTHORIZED_IGNORED_REASON = "unauthorized_author_ignored";
+const UNAUTHORIZED_REVIEW_REASON = "unauthorized_requires_manual_review";
 
 type InboxStatus =
   | "pending"
@@ -159,6 +161,10 @@ export async function processNextInboxItem(
     });
     if (storedMessage.kind === "self_echo") {
       await handleHistoricalSelfEcho(deps, item, leaseToken);
+      return true;
+    }
+    if (storedMessage.kind === "unauthorized") {
+      await handleHistoricalUnauthorized(deps, item, leaseToken);
       return true;
     }
     if (storedMessage.kind === "quarantine") {
@@ -360,6 +366,75 @@ async function handleHistoricalSelfEcho(
   }
 }
 
+async function handleHistoricalUnauthorized(
+  deps: AppDeps,
+  item: {
+    message_key: string;
+    status: InboxStatus;
+  },
+  leaseToken: string,
+): Promise<void> {
+  if (item.status === "saved") {
+    const quarantined = await deps.db
+      .updateTable("inbox")
+      .set({
+        status: "failed",
+        last_error: UNAUTHORIZED_REVIEW_REASON,
+        failed_at: (deps.now?.() ?? new Date()).getTime(),
+        next_attempt_at: null,
+        lease_token: null,
+        lease_until: null,
+      })
+      .where("message_key", "=", item.message_key)
+      .where("status", "=", "saved")
+      .where("lease_token", "=", leaseToken)
+      .executeTakeFirst();
+
+    if (quarantined.numUpdatedRows === 0n) {
+      throw new Error("Inbox lease was lost while quarantining unauthorized message");
+    }
+
+    logger.warn(
+      { messageKey: item.message_key },
+      "Historical saved unauthorized message quarantined for manual review",
+    );
+    return;
+  }
+
+  if (item.status !== "pending" && item.status !== "analyzed") {
+    throw new Error(`Cannot clean up unauthorized message in ${item.status} state`);
+  }
+
+  const ignored = await deps.db
+    .updateTable("inbox")
+    .set({
+      status: "ignored",
+      parsed_json: serializeMessageAnalysis({
+        version: 1,
+        intent: "ignore",
+      }),
+      response_text: null,
+      last_error: UNAUTHORIZED_IGNORED_REASON,
+      failed_at: null,
+      next_attempt_at: null,
+      lease_token: null,
+      lease_until: null,
+    })
+    .where("message_key", "=", item.message_key)
+    .where("status", "in", ["pending", "analyzed"])
+    .where("lease_token", "=", leaseToken)
+    .executeTakeFirst();
+
+  if (ignored.numUpdatedRows === 0n) {
+    throw new Error("Inbox lease was lost while ignoring unauthorized message");
+  }
+
+  logger.warn(
+    { messageKey: item.message_key },
+    "Historical unauthorized message ignored",
+  );
+}
+
 async function quarantineHistoricalMessage(
   deps: AppDeps,
   item: {
@@ -538,6 +613,7 @@ async function scheduleRetry(
 type StoredMessage =
   | { kind: "inbound"; context: MessageContext }
   | { kind: "self_echo" }
+  | { kind: "unauthorized" }
   | { kind: "quarantine" }
   | { kind: "invalid" };
 
@@ -554,6 +630,9 @@ function deserializeStoredMessage(
     if (classification.kind === "self_echo") {
       return { kind: "self_echo" };
     }
+    if (classification.kind === "unauthorized") {
+      return { kind: "unauthorized" };
+    }
     if (classification.kind === "inbound") {
       return { kind: "inbound", context: classification.context };
     }
@@ -564,19 +643,21 @@ function deserializeStoredMessage(
     }
 
     if (
-      envelopeOptions.selfNumber !== undefined &&
-      legacyContext.sourceAuthor === envelopeOptions.selfNumber
+      envelopeOptions.selfNumber === undefined ||
+      legacyContext.sourceAuthor !== envelopeOptions.selfNumber
     ) {
-      const legacySourceDevice = parseLegacySourceDevice(legacyContext);
-      if (legacySourceDevice === null) {
-        return { kind: "quarantine" };
-      }
-      if (
-        envelopeOptions.allowedInputDeviceIds === undefined ||
-        !envelopeOptions.allowedInputDeviceIds.includes(legacySourceDevice)
-      ) {
-        return { kind: "self_echo" };
-      }
+      return { kind: "unauthorized" };
+    }
+
+    const legacySourceDevice = parseLegacySourceDevice(legacyContext);
+    if (legacySourceDevice === null) {
+      return { kind: "quarantine" };
+    }
+    if (
+      envelopeOptions.allowedInputDeviceIds === undefined ||
+      !envelopeOptions.allowedInputDeviceIds.includes(legacySourceDevice)
+    ) {
+      return { kind: "self_echo" };
     }
 
     return { kind: "inbound", context: legacyContext };

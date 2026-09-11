@@ -50,6 +50,7 @@ function extractSourceDevice(envelope: Record<string, unknown>): number | null {
 export type EnvelopeClassification =
   | { kind: "inbound"; context: MessageContext }
   | { kind: "self_echo" }
+  | { kind: "unauthorized" }
   | { kind: "irrelevant" };
 
 export type EnvelopeOptions = {
@@ -156,8 +157,20 @@ export function classifyEnvelope(
     return { kind: "irrelevant" };
   }
 
+  const hasDataMessage = "dataMessage" in envelope;
   const context = parseDataMessage(envelope);
-  if (context) {
+  if (hasDataMessage) {
+    if (!context) {
+      return { kind: "irrelevant" };
+    }
+
+    if (
+      options.selfNumber === undefined ||
+      context.sourceAuthor !== options.selfNumber
+    ) {
+      return { kind: "unauthorized" };
+    }
+
     return isBotDataMessage(envelope, context, options)
       ? { kind: "self_echo" }
       : { kind: "inbound", context };
