@@ -8,16 +8,39 @@ export async function getAllCategories(
   return rows;
 }
 
+export function normalizeCategoryName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+export async function categoryExists(
+  db: QueryCreator<AppDatabase>,
+  name: string,
+): Promise<boolean> {
+  const normalizedName = normalizeCategoryName(name);
+  const result = await db
+    .selectFrom("categories")
+    .select("name")
+    .where("name", "=", normalizedName)
+    .executeTakeFirst();
+
+  return result !== undefined;
+}
+
 export async function addCategory(
   db: QueryCreator<AppDatabase>,
   name: string,
   description?: string | null,
 ): Promise<boolean> {
   const now = new Date().toISOString();
+  const normalizedName = normalizeCategoryName(name);
   
   const result = await db
     .insertInto("categories")
-    .values({ name, description: description ?? null, created_at: now })
+    .values({
+      name: normalizedName,
+      description: description ?? null,
+      created_at: now,
+    })
     .onConflict((oc) => oc.doNothing())
     .executeTakeFirst();
     
@@ -28,9 +51,10 @@ export async function removeCategory(
   db: QueryCreator<AppDatabase>,
   name: string,
 ): Promise<boolean> {
+  const normalizedName = normalizeCategoryName(name);
   const result = await db
     .deleteFrom("categories")
-    .where("name", "=", name)
+    .where("name", "=", normalizedName)
     .executeTakeFirst();
     
   return result.numDeletedRows > 0n;

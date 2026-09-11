@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initSchema, openDatabase } from "../../db/connection.js";
-import { addCategory, getAllCategories, removeCategory } from "./repository.js";
+import {
+  addCategory,
+  categoryExists,
+  getAllCategories,
+  removeCategory,
+} from "./repository.js";
 import type { Kysely } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
 
@@ -46,6 +51,14 @@ describe("categories repository", () => {
     const categories = await getAllCategories(db);
     expect(categories.length).toBe(1);
     expect(categories[0]?.description).toBe("netflix");
+  });
+
+  it("normalizes category names when checking existence", async () => {
+    await addCategory(db, " Food ");
+
+    await expect(categoryExists(db, "food")).resolves.toBe(true);
+    await expect(categoryExists(db, " FOOD ")).resolves.toBe(true);
+    await expect(categoryExists(db, "travel")).resolves.toBe(false);
   });
 
   it("removes existing category", async () => {

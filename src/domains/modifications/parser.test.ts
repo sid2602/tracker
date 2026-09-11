@@ -25,6 +25,7 @@ const config: Config = {
   langfuseSecretKey: null,
   langfuseBaseUrl: "https://cloud.langfuse.com",
 };
+const REFERENCE_DATE = "2026-09-11";
 
 describe("parseModification", () => {
   beforeEach(() => {
@@ -42,7 +43,7 @@ describe("parseModification", () => {
       });
 
     await expect(
-      parseModification(config, "cofnij"),
+      parseModification(config, "cofnij", REFERENCE_DATE),
     ).resolves.toEqual({
       action: "delete",
       target: "last",
@@ -55,9 +56,25 @@ describe("parseModification", () => {
     generateObjectMock.mockRejectedValue(new Error("invalid response"));
 
     await expect(
-      parseModification(config, "cofnij"),
+      parseModification(config, "cofnij", REFERENCE_DATE),
     ).rejects.toThrow("invalid response");
 
     expect(generateObjectMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("converts semantically incomplete model output into user feedback", async () => {
+    generateObjectMock.mockResolvedValue({
+      object: {
+        action: "delete",
+        target: "specific",
+        searchCriteria: null,
+      },
+    });
+
+    await expect(
+      parseModification(config, "delete this", REFERENCE_DATE),
+    ).rejects.toThrow(
+      "Please identify one expense by ID or provide unambiguous details.",
+    );
   });
 });

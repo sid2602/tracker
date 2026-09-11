@@ -111,15 +111,67 @@ describe("handleModification", () => {
       target: "specific",
       searchCriteria: { category: "Kawa", amountCents: null, keyword: null },
       id: null,
-      updatePayload: { category: "Rozrywka", amountCents: null },
+      updatePayload: { category: " Food ", amountCents: null },
     });
 
     const result = await handleModification(deps, {
-      messageKey: "msg-1", sourceAuthor: TEST_SOURCE_AUTHOR, sourceTimestamp: 200, rawText: "zmien kategorie kawy na rozrywka"
+      messageKey: "msg-1", sourceAuthor: TEST_SOURCE_AUTHOR, sourceTimestamp: 200, rawText: "zmien kategorie kawy na food"
     });
 
     expect(result).toMatchObject({ kind: "success" });
-    const expenses = await deps.db.selectFrom("expenses").selectAll().where("category", "=", "Rozrywka").execute();
+    const expenses = await deps.db.selectFrom("expenses").selectAll().where("category", "=", "food").execute();
     expect(expenses).toHaveLength(1);
+  });
+
+  it("rejects an update to a category outside the global catalog", async () => {
+    parseModificationMock.mockResolvedValue({
+      action: "update",
+      target: "specific",
+      searchCriteria: { category: "Kawa", amountCents: null, keyword: null },
+      id: null,
+      updatePayload: { category: "not-configured", amountCents: null },
+    });
+
+    const result = await handleModification(deps, {
+      messageKey: "msg-2",
+      sourceAuthor: TEST_SOURCE_AUTHOR,
+      sourceTimestamp: 201,
+      rawText: "zmien kategorie kawy na not-configured",
+    });
+
+    expect(result).toEqual({
+      kind: "success",
+      message: "Category 'not-configured' does not exist. Please choose an existing category.",
+    });
+    const expenses = await deps.db
+      .selectFrom("expenses")
+      .selectAll()
+      .where("category", "=", "Kawa")
+      .execute();
+    expect(expenses).toHaveLength(1);
+  });
+
+  it("returns user feedback and does not fall back for an incomplete selector", async () => {
+    parseModificationMock.mockResolvedValue({
+      action: "delete",
+      target: "specific",
+      searchCriteria: null,
+      id: null,
+      updatePayload: null,
+    });
+
+    const result = await handleModification(deps, {
+      messageKey: "msg-3",
+      sourceAuthor: TEST_SOURCE_AUTHOR,
+      sourceTimestamp: 202,
+      rawText: "delete this",
+    });
+
+    expect(result).toEqual({
+      kind: "success",
+      message: "Please identify one expense by ID or provide unambiguous details.",
+    });
+    const expenses = await deps.db.selectFrom("expenses").selectAll().execute();
+    expect(expenses).toHaveLength(2);
   });
 });

@@ -6,9 +6,13 @@ import type { AppDatabase } from "../db/schema.js";
 import type { Config } from "../config.js";
 import type { AppDeps } from "./types.js";
 import { saveToInbox, processNextInboxItem } from "./inbox.js";
+import type { ModificationResult } from "../domains/modifications/schema.js";
 
 const routeMessageMock = vi.fn();
 const parseExpensesMock = vi.fn();
+const parseModificationMock = vi.fn<
+  (config: Config, text: string, referenceDate: string) => Promise<ModificationResult>
+>();
 const sendMessageMock = vi.fn();
 
 vi.mock("../routing/router.js", () => ({
@@ -22,6 +26,14 @@ vi.mock("../domains/expenses/parser.js", () => ({
     referenceDate: string,
     categories: unknown,
   ) => parseExpensesMock(config, text, referenceDate, categories),
+}));
+
+vi.mock("../domains/modifications/parser.js", () => ({
+  parseModification: (
+    config: Config,
+    text: string,
+    referenceDate: string,
+  ) => parseModificationMock(config, text, referenceDate),
 }));
 
 vi.mock("../signal/index.js", async (importOriginal) => {
@@ -92,6 +104,10 @@ describe("inbox integration", () => {
         },
       ],
     });
+    parseModificationMock.mockResolvedValue({
+      action: "delete",
+      target: "last",
+    });
     sendMessageMock.mockResolvedValue(undefined);
   });
 
@@ -135,5 +151,99 @@ describe("inbox integration", () => {
     expect(inboxItem.parsed_json).not.toBeNull();
     expect(inboxItem.attempts).toBe(1);
     expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("rolls back a modification when saving the inbox result fails", async () => {
+    routeMessageMock.mockResolvedValue({ intent: "modification" });
+    await db
+      .insertInto("expenses")
+      .values({
+        source_author: "+15005550100",
+        source_timestamp: 1_700_000_000_001,
+        item_index: 0,
+        amount_cents: 1500,
+        currency: "PLN",
+        category: "food",
+        occurred_on: "2026-09-11",
+        note: "kawa",
+        raw_text: "kawa 15 zl",
+        created_at: new Date().toISOString(),
+      })
+      .execute();
+    await saveToInbox(deps, {
+      envelope: {
+        source: "+15005550100",
+        sourceDevice: 1,
+        timestamp: 1_700_000_000_002,
+        dataMessage: {
+          message: "usuń ostatni",
+        },
+      },
+    });
+
+    await sql`
+      CREATE TRIGGER fail_modification_saved_transition
+      BEFORE UPDATE OF status ON inbox
+      WHEN NEW.status = 'saved'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced modification transition failure');
+      END
+    `.execute(db);
+
+    await processNextInboxItem(deps);
+
+    const expenses = await db.selectFrom("expenses").selectAll().execute();
+    const inboxItem = await db
+      .selectFrom("inbox")
+      .selectAll()
+      .executeTakeFirstOrThrow();
+    expect(expenses).toHaveLength(1);
+    expect(inboxItem.status).toBe("analyzed");
+    expect(inboxItem.parsed_json).not.toBeNull();
+    expect(inboxItem.attempts).toBe(1);
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("persists semantic modification feedback without mutating data", async () => {
+    routeMessageMock.mockResolvedValue({ intent: "modification" });
+    await db
+      .insertInto("expenses")
+      .values({
+        source_author: "+15005550100",
+        source_timestamp: 1_700_000_000_001,
+        item_index: 0,
+        amount_cents: 1500,
+        currency: "PLN",
+        category: "food",
+        occurred_on: "2026-09-11",
+        note: "kawa",
+        raw_text: "kawa 15 zl",
+        created_at: new Date().toISOString(),
+      })
+      .execute();
+    await saveToInbox(deps, {
+      envelope: {
+        source: "+15005550100",
+        sourceDevice: 1,
+        timestamp: 1_700_000_000_003,
+        dataMessage: {
+          message: "usuń ostatnią kawę",
+        },
+      },
+    });
+
+    await processNextInboxItem(deps);
+
+    const expenses = await db.selectFrom("expenses").selectAll().execute();
+    const inboxItem = await db
+      .selectFrom("inbox")
+      .selectAll()
+      .executeTakeFirstOrThrow();
+    expect(expenses).toHaveLength(1);
+    expect(inboxItem.status).toBe("confirmed");
+    expect(inboxItem.response_text).toBe(
+      "I could not safely identify the requested expense. Please specify its ID or exact date/details.",
+    );
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
   });
 });
