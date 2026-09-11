@@ -1,8 +1,13 @@
 import { TIME_ZONE } from "../../constants.js";
-import type { RouterResult } from "../../routing/schema.js";
+import { getReferenceDate } from "../../lib/dates.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
-import { formatCategoryReport, formatTotalReport } from "./format.js";
-import { queryByCategory, queryTotals } from "./queries.js";
+import {
+  EXPENSE_LIST_LIMIT,
+  formatCategoryReport,
+  formatExpenseList,
+  formatTotalReport,
+} from "./format.js";
+import { queryByCategory, queryExpenseList, queryTotals } from "./queries.js";
 import { parseReport } from "./parser.js";
 
 export async function handleReport(
@@ -10,16 +15,22 @@ export async function handleReport(
   context: MessageContext,
 ): Promise<HandlerResult> {
   try {
-    const now = deps.now?.() ?? new Date();
-    const currentDateStr = new Intl.DateTimeFormat("en-CA", {
-      timeZone: TIME_ZONE,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(now);
-
+    const currentDateStr = getReferenceDate(TIME_ZONE, deps.now?.() ?? new Date());
     const params = await parseReport(deps.config, context.rawText, currentDateStr);
     const range = { start: params.start_date, end: params.end_date };
+
+    if (params.group_by === "list") {
+      const { items, totalCount } = await queryExpenseList(
+        deps.db,
+        range,
+        params.categories,
+        EXPENSE_LIST_LIMIT,
+      );
+      return {
+        kind: "success",
+        message: formatExpenseList(params.title, items, totalCount),
+      };
+    }
 
     if (params.group_by === "category") {
       const rows = await queryByCategory(deps.db, range, params.categories);

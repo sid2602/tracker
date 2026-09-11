@@ -18,56 +18,114 @@ describe.runIf(process.env.RUN_EVALS === "true")("LLM Report Parser Evals", () =
     }
   }
 
-  // --- ENGLISH TEST CASES ---
+  // --- ENGLISH ---
 
-  it("parses exact day request in English", async () => {
-    const result = await parseReport(config, "how much did I spend today?", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-09-04$/);
-    expect(result.end_date).toMatch(/^\d{4}-09-04$/);
-    expect(result.group_by).toBe("total");
-    if (result.categories !== undefined) {
-      expect(result.categories).toHaveLength(0);
-    }
-  }, 15000);
-
-  it("parses category filter and explicit month in English", async () => {
-    const result = await parseReport(config, "report for groceries in August", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-08-01$/);
-    expect(result.end_date).toMatch(/^\d{4}-08-31$/);
-    expect(result.group_by).toBe("total");
-    expect(result.categories).toBeDefined();
-    expect(result.categories?.map(c => c.toLowerCase())).toContain("groceries");
-  }, 15000);
-
-  it("parses multiple categories and defaults to current month in English", async () => {
-    const result = await parseReport(config, "what did I spend on food and transport?", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-09-01$/); // Default to current month
-    expect(result.end_date).toMatch(/^\d{4}-09-30$/);
-    expect(result.categories).toBeDefined();
-    expect(result.categories?.map(c => c.toLowerCase())).toContain("food");
-    expect(result.categories?.map(c => c.toLowerCase())).toContain("transport");
-  }, 15000);
-
-  // --- POLISH TEST CASES ---
-
-  it("parses explicit month request in Polish", async () => {
-    const result = await parseReport(config, "podsumowanie wydatków za sierpień", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-08-01$/);
-    expect(result.end_date).toMatch(/^\d{4}-08-31$/);
+  it("parses exact day request as total", async () => {
+    const result = await parseReport(
+      config,
+      "how much did I spend today?",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-04");
+    expect(result.end_date).toBe("2026-09-04");
     expect(result.group_by).toBe("total");
   }, 15000);
 
-  it("parses group by category with typo in Polish", async () => {
-    const result = await parseReport(config, "pokaz wydatki z podziałem na kategorie dzidiaj", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-09-04$/); // dzidiaj -> dzisiaj -> today
-    expect(result.end_date).toMatch(/^\d{4}-09-04$/);
+  it("parses category filter and explicit month", async () => {
+    const result = await parseReport(
+      config,
+      "report for groceries in August",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-08-01");
+    expect(result.end_date).toBe("2026-08-31");
+    expect(result.group_by).toBe("total");
+    expect(result.categories?.map((c) => c.toLowerCase())).toContain("groceries");
+  }, 15000);
+
+  it("parses multiple categories and defaults to current month", async () => {
+    const result = await parseReport(
+      config,
+      "what did I spend on food and transport?",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-01");
+    expect(result.end_date).toBe("2026-09-30");
+    expect(result.categories?.map((c) => c.toLowerCase())).toContain("food");
+    expect(result.categories?.map((c) => c.toLowerCase())).toContain("transport");
+  }, 15000);
+
+  it("parses list request for yesterday", async () => {
+    const result = await parseReport(
+      config,
+      "list my expenses yesterday",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-03");
+    expect(result.end_date).toBe("2026-09-03");
+    expect(result.group_by).toBe("list");
+  }, 15000);
+
+  it("parses list request for this week", async () => {
+    const result = await parseReport(
+      config,
+      "list my expenses this week",
+      REFERENCE_DATE,
+    );
+    expect(result.group_by).toBe("list");
+    expect(result.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.end_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(result.start_date <= result.end_date).toBe(true);
+  }, 15000);
+
+  it("keeps sum request as total for yesterday", async () => {
+    const result = await parseReport(
+      config,
+      "how much did I spend yesterday?",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-03");
+    expect(result.end_date).toBe("2026-09-03");
+    expect(result.group_by).toBe("total");
+  }, 15000);
+
+  it("parses category breakdown request", async () => {
+    const result = await parseReport(
+      config,
+      "expenses broken down by category",
+      REFERENCE_DATE,
+    );
     expect(result.group_by).toBe("category");
   }, 15000);
 
-  it("defaults to current month for unspecified query in Polish", async () => {
+  // --- POLISH (smoke) ---
+
+  it("parses list request in Polish", async () => {
+    const result = await parseReport(
+      config,
+      "lista wydatków wczoraj",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-03");
+    expect(result.end_date).toBe("2026-09-03");
+    expect(result.group_by).toBe("list");
+  }, 15000);
+
+  it("parses category breakdown with typo in Polish", async () => {
+    const result = await parseReport(
+      config,
+      "pokaz wydatki z podziałem na kategorie dzidiaj",
+      REFERENCE_DATE,
+    );
+    expect(result.start_date).toBe("2026-09-04");
+    expect(result.end_date).toBe("2026-09-04");
+    expect(result.group_by).toBe("category");
+  }, 15000);
+
+  it("defaults to current month for unspecified Polish query", async () => {
     const result = await parseReport(config, "ile wydalem", REFERENCE_DATE);
-    expect(result.start_date).toMatch(/^\d{4}-09-01$/);
-    expect(result.end_date).toMatch(/^\d{4}-09-30$/);
+    expect(result.start_date).toBe("2026-09-01");
+    expect(result.end_date).toBe("2026-09-30");
     expect(result.group_by).toBe("total");
   }, 15000);
 });

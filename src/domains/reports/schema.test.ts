@@ -37,4 +37,15 @@ describe("reports schema", () => {
     expect(result.group_by).toBe("category");
     expect(result.categories).toEqual(["food", "fuel"]);
   });
+
+  it("accepts valid schema with list", () => {
+    const result = reportParamsSchema.parse({
+      start_date: "2026-09-10",
+      end_date: "2026-09-10",
+      title: "Yesterday",
+      group_by: "list",
+    });
+
+    expect(result.group_by).toBe("list");
+  });
 });

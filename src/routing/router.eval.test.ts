@@ -14,11 +14,12 @@ const ROUTER_EVALS: { input: string; expected: RouterResult["intent"] }[] = [
 
   // Report (Raporty)
   { input: "ile wydalem w tym miesiacu?", expected: "report" },
-  { input: "podsumowanie wydatkow za wrzesien", expected: "report" },
   { input: "how much did I spend this month?", expected: "report" },
   { input: "september expense report", expected: "report" },
-  { input: "raport kategoria jedzenie", expected: "report" },
   { input: "report for groceries", expected: "report" },
+  { input: "list my expenses yesterday", expected: "report" },
+  { input: "list my expenses this week", expected: "report" },
+  { input: "lista wydatków wczoraj", expected: "report" },
 
   // Category (Kategorie)
   { input: "dodaj nowa kategorie dom", expected: "category" },

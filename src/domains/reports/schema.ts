@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const reportGroupBySchema = z.enum(["total", "category"]);
+export const reportGroupBySchema = z.enum(["total", "category", "list"]);
 
 export const reportParamsSchema = z.object({
   start_date: z.string().describe("Start date of the report in YYYY-MM-DD format (inclusive)."),

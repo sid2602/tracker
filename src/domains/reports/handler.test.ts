@@ -208,4 +208,131 @@ describe("handleReport", () => {
         "📊 Report: Transport this month\n\n5.00 PLN",
     });
   });
+
+  it("lists individual expenses for a date range", async () => {
+    await insertExpenses(deps.db, [
+      createExpense({
+        itemIndex: 0,
+        amountCents: 1250,
+        category: "food",
+        note: "kawa",
+        occurredOn: "2026-09-10",
+      }),
+      createExpense({
+        itemIndex: 1,
+        amountCents: 4500,
+        category: "groceries",
+        note: "Lidl",
+        occurredOn: "2026-09-10",
+      }),
+      createExpense({
+        sourceTimestamp: 1_700_000_000_003,
+        itemIndex: 0,
+        amountCents: 999,
+        note: "out of range",
+        occurredOn: "2026-08-01",
+      }),
+    ]);
+
+    parseReportMock.mockResolvedValue({
+      start_date: "2026-09-10",
+      end_date: "2026-09-10",
+      title: "Yesterday",
+      group_by: "list",
+    });
+
+    const result = await handleReport(deps, context);
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      return;
+    }
+    expect(result.message).toContain("📋 Expenses: Yesterday");
+    expect(result.message).toContain("food — kawa");
+    expect(result.message).toContain("groceries — Lidl");
+    expect(result.message).not.toContain("out of range");
+    expect(result.message).toContain("2 expenses");
+  });
+
+  it("returns empty list message when no expenses", async () => {
+    parseReportMock.mockResolvedValue({
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "This month",
+      group_by: "list",
+    });
+
+    const result = await handleReport(deps, context);
+
+    expect(result).toEqual({
+      kind: "success",
+      message: "📋 Expenses: This month\n\nno expenses",
+    });
+  });
+
+  it("filters list by category", async () => {
+    await insertExpenses(deps.db, [
+      createExpense({
+        itemIndex: 0,
+        category: "food",
+        note: "kawa",
+      }),
+      createExpense({
+        itemIndex: 1,
+        category: "transport",
+        note: "uber",
+      }),
+    ]);
+
+    parseReportMock.mockResolvedValue({
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "Transport",
+      group_by: "list",
+      categories: ["transport"],
+    });
+
+    const result = await handleReport(deps, context);
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      return;
+    }
+    expect(result.message).toContain("transport — uber");
+    expect(result.message).not.toContain("kawa");
+    expect(result.message).toContain("1 expense");
+  });
+
+  it("truncates list to 50 expenses", async () => {
+    const expenses = Array.from({ length: 55 }, (_, index) =>
+      createExpense({
+        sourceTimestamp: 1_700_000_000_000 + index,
+        itemIndex: 0,
+        amountCents: 100 + index,
+        note: `item-${index}`,
+        occurredOn: "2026-09-10",
+      }),
+    );
+    await insertExpenses(deps.db, expenses);
+
+    parseReportMock.mockResolvedValue({
+      start_date: "2026-09-01",
+      end_date: "2026-09-30",
+      title: "This month",
+      group_by: "list",
+    });
+
+    const result = await handleReport(deps, context);
+
+    expect(result.kind).toBe("success");
+    if (result.kind !== "success") {
+      return;
+    }
+    expect(result.message).toContain(
+      "Showing 50 of 55 expenses. Narrow the date range for the rest.",
+    );
+    expect(result.message).toContain("item-0");
+    expect(result.message).toContain("item-49");
+    expect(result.message).not.toContain("item-50");
+  });
 });
