@@ -141,19 +141,16 @@ describe("handleExpense", () => {
     expect(await countExpenses(deps.db)).toBe(2);
   });
 
-  it("does not save when LLM parsing fails", async () => {
+  it("propagates LLM parsing failures so the inbox can retry", async () => {
     parseExpensesMock.mockRejectedValue(new Error("invalid response"));
 
-    const result = await handleExpense(deps, {
-      messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
-      sourceTimestamp: 1_700_000_000_002,
-      rawText: "cos niejasnego",
-    });
-
-    expect(result).toEqual({
-      kind: "failure",
-      message: "invalid response",
-    });
+    await expect(
+      handleExpense(deps, {
+        messageKey: "test-key", sourceAuthor: TEST_SOURCE_AUTHOR,
+        sourceTimestamp: 1_700_000_000_002,
+        rawText: "cos niejasnego",
+      }),
+    ).rejects.toThrow("invalid response");
     expect(await countExpenses(deps.db)).toBe(0);
   });
 

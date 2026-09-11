@@ -43,9 +43,12 @@ const config: Config = {
 };
 
 function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
+  const sourceTimestamp = overrides.sourceTimestamp ?? 1_700_000_000_000;
+
   return {
+    sourceMessageKey: `message-${sourceTimestamp}`,
     sourceAuthor: TEST_SOURCE_AUTHOR,
-    sourceTimestamp: 1_700_000_000_000,
+    sourceTimestamp,
     itemIndex: 0,
     amountCents: 1500,
     currency: "PLN",

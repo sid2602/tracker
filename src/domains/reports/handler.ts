@@ -1,5 +1,7 @@
 import { TIME_ZONE } from "../../constants.js";
 import { getReferenceDate } from "../../lib/dates.js";
+import type { QueryCreator } from "kysely";
+import type { AppDatabase } from "../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
 import {
   EXPENSE_LIST_LIMIT,
@@ -9,45 +11,54 @@ import {
 } from "./format.js";
 import { queryByCategory, queryExpenseList, queryTotals } from "./queries.js";
 import { parseReport } from "./parser.js";
+import type { ReportParams } from "./schema.js";
 
 export async function handleReport(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  try {
-    const currentDateStr = getReferenceDate(TIME_ZONE, deps.now?.() ?? new Date());
-    const params = await parseReport(deps.config, context.rawText, currentDateStr);
-    const range = { start: params.start_date, end: params.end_date };
+  const params = await analyzeReport(deps, context);
+  return persistReport(deps.db, params);
+}
 
-    if (params.group_by === "list") {
-      const { items, totalCount } = await queryExpenseList(
-        deps.db,
-        range,
-        params.categories,
-        EXPENSE_LIST_LIMIT,
-      );
-      return {
-        kind: "success",
-        message: formatExpenseList(params.title, items, totalCount),
-      };
-    }
+export async function analyzeReport(
+  deps: AppDeps,
+  context: MessageContext,
+): Promise<ReportParams> {
+  const currentDateStr = getReferenceDate(TIME_ZONE, deps.now?.() ?? new Date());
+  return parseReport(deps.config, context.rawText, currentDateStr);
+}
 
-    if (params.group_by === "category") {
-      const rows = await queryByCategory(deps.db, range, params.categories);
-      return {
-        kind: "success",
-        message: formatCategoryReport(params.title, rows),
-      };
-    }
+export async function persistReport(
+  db: QueryCreator<AppDatabase>,
+  params: ReportParams,
+): Promise<HandlerResult> {
+  const range = { start: params.start_date, end: params.end_date };
 
-    const rows = await queryTotals(deps.db, range, params.categories);
+  if (params.group_by === "list") {
+    const { items, totalCount } = await queryExpenseList(
+      db,
+      range,
+      params.categories,
+      EXPENSE_LIST_LIMIT,
+    );
     return {
       kind: "success",
-      message: formatTotalReport(params.title, rows),
+      message: formatExpenseList(params.title, items, totalCount),
     };
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Failed to parse report request";
-    return { kind: "failure", message };
   }
+
+  if (params.group_by === "category") {
+    const rows = await queryByCategory(db, range, params.categories);
+    return {
+      kind: "success",
+      message: formatCategoryReport(params.title, rows),
+    };
+  }
+
+  const rows = await queryTotals(db, range, params.categories);
+  return {
+    kind: "success",
+    message: formatTotalReport(params.title, rows),
+  };
 }

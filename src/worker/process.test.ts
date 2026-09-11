@@ -80,13 +80,9 @@ describe("processMessage", () => {
     });
   });
 
-  it("maps router exceptions to unrecognized", async () => {
+  it("propagates router exceptions so the inbox can retry", async () => {
     routeMessageMock.mockRejectedValue(new Error("schema mismatch"));
 
-    await expect(processMessage(deps, context)).resolves.toEqual({
-      kind: "failure",
-      message: UNRECOGNIZED_MESSAGE,
-      errorCode: "processing_failed",
-    });
+    await expect(processMessage(deps, context)).rejects.toThrow("schema mismatch");
   });
 });

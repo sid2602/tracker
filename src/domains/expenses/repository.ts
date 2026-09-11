@@ -1,7 +1,8 @@
-import type { Kysely } from "kysely";
+import { sql, type QueryCreator } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
 
 export type ExpenseInput = {
+  sourceMessageKey: string;
   sourceAuthor: string;
   sourceTimestamp: number;
   itemIndex: number;
@@ -14,7 +15,7 @@ export type ExpenseInput = {
 };
 
 export async function insertExpenses(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   expenses: ExpenseInput[],
 ): Promise<{ inserted: number }> {
   if (expenses.length === 0) {
@@ -24,6 +25,7 @@ export async function insertExpenses(
   const createdAt = new Date().toISOString();
   
   const values = expenses.map((expense) => ({
+    source_message_key: expense.sourceMessageKey,
     source_author: expense.sourceAuthor,
     source_timestamp: expense.sourceTimestamp,
     item_index: expense.itemIndex,
@@ -51,18 +53,17 @@ export async function insertExpenses(
   return { inserted };
 }
 
-export async function countExpenses(db: Kysely<AppDatabase>): Promise<number> {
-  const { count } = db.fn;
+export async function countExpenses(db: QueryCreator<AppDatabase>): Promise<number> {
   const result = await db
     .selectFrom("expenses")
-    .select(count<number>("id").as("count"))
+    .select(sql<number>`count(id)`.as("count"))
     .executeTakeFirst();
 
   return Number(result?.count ?? 0);
 }
 
 export async function getExpenseByKey(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   sourceAuthor: string,
   sourceTimestamp: number,
   itemIndex: number,

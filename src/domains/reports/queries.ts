@@ -1,4 +1,4 @@
-import type { Kysely, SelectQueryBuilder } from "kysely";
+import { sql, type QueryCreator, type SelectQueryBuilder } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
 import type { DateRange } from "../../lib/periods.js";
 
@@ -44,16 +44,14 @@ function applyRangeAndCategories<O>(
 }
 
 export async function queryTotals(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   range: DateRange,
   categories?: string[],
 ): Promise<TotalBucket[]> {
-  const { sum } = db.fn;
-
   const rows = await applyRangeAndCategories(
     db
       .selectFrom("expenses")
-      .select(["currency", sum<number>("amount_cents").as("amount_cents")]),
+      .select(["currency", sql<number>`sum(amount_cents)`.as("amount_cents")]),
     range,
     categories,
   )
@@ -68,19 +66,17 @@ export async function queryTotals(
 }
 
 export async function queryByCategory(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   range: DateRange,
   categories?: string[],
 ): Promise<CategoryBucket[]> {
-  const { sum } = db.fn;
-
   const rows = await applyRangeAndCategories(
     db
       .selectFrom("expenses")
       .select([
         "category",
         "currency",
-        sum<number>("amount_cents").as("amount_cents"),
+        sql<number>`sum(amount_cents)`.as("amount_cents"),
       ]),
     range,
     categories,
@@ -98,13 +94,13 @@ export async function queryByCategory(
 }
 
 export async function queryExpenseList(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   range: DateRange,
   categories?: string[],
   limit?: number,
 ): Promise<ExpenseListResult> {
   const countRow = await applyRangeAndCategories(
-    db.selectFrom("expenses").select(db.fn.countAll<number>().as("count")),
+    db.selectFrom("expenses").select(sql<number>`count(*)`.as("count")),
     range,
     categories,
   ).executeTakeFirstOrThrow();

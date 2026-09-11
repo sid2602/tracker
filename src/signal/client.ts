@@ -32,6 +32,7 @@ export async function listenForMessages(
       input: socket,
       crlfDelay: Infinity,
     });
+    let payloadQueue = Promise.resolve();
 
     rl.on("error", (err) => {
        logger.warn({ err }, "Readline error");
@@ -42,9 +43,12 @@ export async function listenForMessages(
       try {
         const payload = JSON.parse(line);
         if (payload.method === "receive") {
-          onPayload(payload).catch((err) => {
-            logger.error({ err }, "Failed to process payload in onPayload");
-          });
+          payloadQueue = payloadQueue
+            .then(() => persistPayloadWithRetry(payload, onPayload, options.signal))
+            .catch((err: unknown) => {
+              logger.error({ err }, "Failed to persist Signal payload");
+              socket?.destroy();
+            });
         }
       } catch (err) {
         logger.error({ err, line }, "Failed to parse JSON-RPC line");
@@ -79,6 +83,25 @@ export async function listenForMessages(
       options.signal.addEventListener("abort", () => resolve());
     }
   });
+}
+
+async function persistPayloadWithRetry(
+  payload: unknown,
+  onPayload: (payload: unknown) => Promise<void>,
+  signal?: AbortSignal,
+): Promise<void> {
+  let delayMs = 1_000;
+
+  while (!signal?.aborted) {
+    try {
+      await onPayload(payload);
+      return;
+    } catch (error: unknown) {
+      logger.error({ error, delayMs }, "Failed to persist Signal payload, retrying");
+      await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+      delayMs = Math.min(delayMs * 2, 60_000);
+    }
+  }
 }
 
 export async function sendMessage(

@@ -1,7 +1,10 @@
 import { logger } from "../../lib/logger.js";
+import type { QueryCreator } from "kysely";
+import type { AppDatabase } from "../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
 import { parseModification } from "./parser.js";
 import { findMatchingExpenses, deleteExpense, updateExpense } from "./repository.js";
+import type { ModificationResult } from "./schema.js";
 
 function formatAmount(amountCents: number, currency: string): string {
   return `${(amountCents / 100).toFixed(2)} ${currency}`;
@@ -11,10 +14,25 @@ export async function handleModification(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  const modification = await parseModification(deps.config, context.rawText);
+  const modification = await analyzeModification(deps, context);
+  return persistModification(deps.db, context, modification);
+}
+
+export async function analyzeModification(
+  deps: AppDeps,
+  context: MessageContext,
+): Promise<ModificationResult> {
+  return parseModification(deps.config, context.rawText);
+}
+
+export async function persistModification(
+  db: QueryCreator<AppDatabase>,
+  context: MessageContext,
+  modification: ModificationResult,
+): Promise<HandlerResult> {
   logger.info({ modification }, "parsed modification intent");
 
-  const matches = await findMatchingExpenses(deps.db, context.sourceAuthor, modification);
+  const matches = await findMatchingExpenses(db, context.sourceAuthor, modification);
 
   if (matches.length === 0) {
     return {
@@ -26,14 +44,14 @@ export async function handleModification(
   if (matches.length === 1) {
     const expense = matches[0];
     if (modification.action === "delete") {
-      await deleteExpense(deps.db, expense.id);
+      await deleteExpense(db, expense.id);
       return {
         kind: "success",
         message: `Deleted expense: ${expense.category} ${formatAmount(expense.amount_cents, expense.currency)} on ${expense.occurred_on}`,
       };
     } else {
       if (modification.updatePayload) {
-        await updateExpense(deps.db, expense.id, modification.updatePayload);
+        await updateExpense(db, expense.id, modification.updatePayload);
         return {
           kind: "success",
           message: `Updated expense #${expense.id}.`,

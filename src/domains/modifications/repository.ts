@@ -1,9 +1,9 @@
-import { Kysely } from "kysely";
-import type { AppDatabase } from "../../db/schema.js";
+import type { QueryCreator } from "kysely";
+import type { AppDatabase, ExpenseTable } from "../../db/schema.js";
 import type { ModificationResult } from "./schema.js";
 
 export async function findMatchingExpenses(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   author: string,
   modification: ModificationResult,
 ) {
@@ -38,16 +38,16 @@ export async function findMatchingExpenses(
   return await query.execute();
 }
 
-export async function deleteExpense(db: Kysely<AppDatabase>, id: number) {
+export async function deleteExpense(db: QueryCreator<AppDatabase>, id: number) {
   await db.deleteFrom("expenses").where("id", "=", id).execute();
 }
 
 export async function updateExpense(
-  db: Kysely<AppDatabase>,
+  db: QueryCreator<AppDatabase>,
   id: number,
-  payload: { category?: string | null; amountCents?: number | null }
+  payload: { category?: string | null; amountCents?: number | null },
 ) {
-  const updates: Record<string, any> = {};
+  const updates: Partial<Pick<ExpenseTable, "category" | "amount_cents">> = {};
   if (payload.category) updates.category = payload.category;
   if (payload.amountCents) updates.amount_cents = payload.amountCents;
   

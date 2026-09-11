@@ -13,9 +13,12 @@ import {
 const TEST_SOURCE_AUTHOR = "+48000000000";
 
 function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
+  const sourceTimestamp = overrides.sourceTimestamp ?? 1_700_000_000_000;
+
   return {
+    sourceMessageKey: `message-${sourceTimestamp}`,
     sourceAuthor: TEST_SOURCE_AUTHOR,
-    sourceTimestamp: 1_700_000_000_000,
+    sourceTimestamp,
     itemIndex: 0,
     amountCents: 1500,
     currency: "PLN",
@@ -88,6 +91,28 @@ describe("expenses repository", () => {
 
     expect(result.inserted).toBe(2);
     expect(await countExpenses(db)).toBe(2);
+    await db.destroy();
+  });
+
+  it("enforces idempotency by source message key and item index", async () => {
+    const db = openDatabase(dbPath);
+    await initSchema(db);
+
+    const first = createExpense({
+      sourceMessageKey: "same-message",
+      sourceTimestamp: 100,
+      itemIndex: 0,
+    });
+    const second = createExpense({
+      sourceMessageKey: "same-message",
+      sourceAuthor: "+48111111111",
+      sourceTimestamp: 200,
+      itemIndex: 0,
+    });
+
+    expect((await insertExpenses(db, [first])).inserted).toBe(1);
+    expect((await insertExpenses(db, [second])).inserted).toBe(0);
+    expect(await countExpenses(db)).toBe(1);
     await db.destroy();
   });
 });

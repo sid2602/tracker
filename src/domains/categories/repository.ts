@@ -1,15 +1,17 @@
-import type { Kysely } from "kysely";
+import type { QueryCreator } from "kysely";
 import type { AppDatabase, CategoryTable } from "../../db/schema.js";
 
-export async function getAllCategories(db: Kysely<AppDatabase>): Promise<CategoryTable[]> {
+export async function getAllCategories(
+  db: QueryCreator<AppDatabase>,
+): Promise<CategoryTable[]> {
   const rows = await db.selectFrom("categories").selectAll().orderBy("name").execute();
   return rows;
 }
 
 export async function addCategory(
-  db: Kysely<AppDatabase>, 
-  name: string, 
-  description?: string | null
+  db: QueryCreator<AppDatabase>,
+  name: string,
+  description?: string | null,
 ): Promise<boolean> {
   const now = new Date().toISOString();
   
@@ -22,7 +24,10 @@ export async function addCategory(
   return (result.numInsertedOrUpdatedRows ?? 0n) > 0n;
 }
 
-export async function removeCategory(db: Kysely<AppDatabase>, name: string): Promise<boolean> {
+export async function removeCategory(
+  db: QueryCreator<AppDatabase>,
+  name: string,
+): Promise<boolean> {
   const result = await db
     .deleteFrom("categories")
     .where("name", "=", name)

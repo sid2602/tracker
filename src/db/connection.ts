@@ -20,6 +20,7 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .createTable("expenses")
     .ifNotExists()
     .addColumn("id", "integer", (col) => col.primaryKey())
+    .addColumn("source_message_key", "text")
     .addColumn("source_author", "text", (col) => col.notNull())
     .addColumn("source_timestamp", "integer", (col) => col.notNull())
     .addColumn("item_index", "integer", (col) => col.notNull())
@@ -49,6 +50,8 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .addColumn("next_attempt_at", "integer")
     .addColumn("lease_until", "integer")
     .addColumn("lease_token", "text")
+    .addColumn("last_error", "text")
+    .addColumn("failed_at", "integer")
     .addColumn("received_at", "integer", (col) => col.notNull())
     .execute();
 
@@ -60,8 +63,42 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .addColumn("created_at", "text", (col) => col.notNull())
     .execute();
 
-  // Simple migration: check if description column exists, add if not
   const tableMetadata = await db.introspection.getTables();
+  const expensesTable = tableMetadata.find((t) => t.name === "expenses");
+  if (expensesTable && !expensesTable.columns.find((c) => c.name === "source_message_key")) {
+    await db.schema.alterTable("expenses").addColumn("source_message_key", "text").execute();
+  }
+
+  const inboxTable = tableMetadata.find((t) => t.name === "inbox");
+  if (inboxTable && !inboxTable.columns.find((c) => c.name === "last_error")) {
+    await db.schema.alterTable("inbox").addColumn("last_error", "text").execute();
+  }
+  if (inboxTable && !inboxTable.columns.find((c) => c.name === "failed_at")) {
+    await db.schema.alterTable("inbox").addColumn("failed_at", "integer").execute();
+  }
+
+  await db.schema
+    .createIndex("expenses_message_item_unique_v2")
+    .ifNotExists()
+    .unique()
+    .on("expenses")
+    .columns(["source_message_key", "item_index"])
+    .execute();
+
+  await db.schema
+    .createIndex("inbox_processing_idx")
+    .ifNotExists()
+    .on("inbox")
+    .columns(["status", "next_attempt_at", "lease_until"])
+    .execute();
+
+  await db.schema
+    .createIndex("expenses_reporting_idx")
+    .ifNotExists()
+    .on("expenses")
+    .columns(["occurred_on", "category", "currency"])
+    .execute();
+
   const categoriesTable = tableMetadata.find((t) => t.name === "categories");
   if (categoriesTable && !categoriesTable.columns.find((c) => c.name === "description")) {
     await db.schema.alterTable("categories").addColumn("description", "text").execute();

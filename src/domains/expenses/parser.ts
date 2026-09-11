@@ -1,7 +1,11 @@
 import type { Config } from "../../config.js";
 import { generateStructured } from "../../llm/generate.js";
 import { getExpensesPrompt } from "./prompt.js";
-import { buildExpenseResultSchema, type ExpenseResult } from "./schema.js";
+import {
+  buildExpenseResultSchema,
+  expenseResultSchema,
+  type ExpenseResult,
+} from "./schema.js";
 
 export async function parseExpenses(
   config: Config,
@@ -17,5 +21,5 @@ export async function parseExpenses(
     "llm.expense",
   );
 
-  return schema.parse(result) as ExpenseResult;
+  return expenseResultSchema.parse(result);
 }

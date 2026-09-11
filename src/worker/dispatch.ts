@@ -1,13 +1,29 @@
 import { handleExpense } from "../domains/expenses/index.js";
+import {
+  analyzeExpense,
+  persistExpense,
+} from "../domains/expenses/handler.js";
 import { logger } from "../lib/logger.js";
+import {
+  analyzeReport,
+  persistReport,
+} from "../domains/reports/handler.js";
 import { handleReport } from "../domains/reports/index.js";
+import { analyzeCategory, persistCategory } from "../domains/categories/handler.js";
 import { handleCategory } from "../domains/categories/index.js";
+import {
+  analyzeModification,
+  persistModification,
+} from "../domains/modifications/handler.js";
 import { handleModification } from "../domains/modifications/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
 import { routeMessage } from "../routing/router.js";
 import { recordMessageTrace } from "../tracing.js";
 import type { RouterResult } from "../routing/schema.js";
+import type { QueryCreator } from "kysely";
+import type { AppDatabase } from "../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
+import type { MessageAnalysis } from "./analysis.js";
 
 export async function dispatchMessage(
   deps: AppDeps,
@@ -28,45 +44,95 @@ export async function dispatchMessage(
   }
 }
 
+export async function analyzeMessage(
+  deps: AppDeps,
+  context: MessageContext,
+): Promise<MessageAnalysis> {
+  const route = await routeMessage(deps.config, context.rawText);
+  logger.info({ route }, "routed message intent");
+
+  switch (route.intent) {
+    case "expense":
+      return {
+        version: 1,
+        intent: "expense",
+        parsed: await analyzeExpense(deps, context),
+      };
+    case "report":
+      return {
+        version: 1,
+        intent: "report",
+        parsed: await analyzeReport(deps, context),
+      };
+    case "category":
+      return {
+        version: 1,
+        intent: "category",
+        parsed: await analyzeCategory(deps, context),
+      };
+    case "modification":
+      return {
+        version: 1,
+        intent: "modification",
+        parsed: await analyzeModification(deps, context),
+      };
+    case "ignore":
+      return { version: 1, intent: "ignore" };
+  }
+}
+
+export async function persistAnalyzedMessage(
+  deps: AppDeps,
+  context: MessageContext,
+  analysis: MessageAnalysis,
+  db: QueryCreator<AppDatabase> = deps.db,
+): Promise<HandlerResult> {
+  switch (analysis.intent) {
+    case "expense":
+      return persistExpense(db, context, analysis.parsed);
+    case "report":
+      return persistReport(db, analysis.parsed);
+    case "category":
+      return persistCategory(db, analysis.parsed);
+    case "modification":
+      return persistModification(db, context, analysis.parsed);
+    case "ignore":
+      return { kind: "silent" };
+  }
+}
+
 export async function processMessage(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  try {
-    const route = await routeMessage(deps.config, context.rawText);
-    logger.info({ route }, "routed message intent");
-    const result = await dispatchMessage(deps, context, route);
+  const route = await routeMessage(deps.config, context.rawText);
+  logger.info({ route }, "routed message intent");
+  const result = await dispatchMessage(deps, context, route);
+  const finalResult = normalizeHandlerResult(result);
+  recordProcessedMessageTrace(route, finalResult);
+  return finalResult;
+}
 
-    const finalResult: HandlerResult =
-      result.kind === "failure"
-        ? {
-            kind: "failure",
-            message: UNRECOGNIZED_MESSAGE,
-            errorCode: "unrecognized",
-          }
-        : result;
-
-    recordMessageTrace({
-      metadata: buildTraceMetadata(route, finalResult),
-      output: buildTraceOutput(finalResult),
-    });
-    return finalResult;
-  } catch (error) {
-    logger.warn({ error }, "Message processing failed");
-    const failure: HandlerResult = {
-      kind: "failure",
-      message: UNRECOGNIZED_MESSAGE,
-      errorCode: "processing_failed",
-    };
-    recordMessageTrace({
-      metadata: {
-        resultKind: "failure",
-        errorCode: "processing_failed",
-      },
-      output: buildTraceOutput(failure),
-    });
-    return failure;
+export function normalizeHandlerResult(result: HandlerResult): HandlerResult {
+  if (result.kind !== "failure") {
+    return result;
   }
+
+  return {
+    kind: "failure",
+    message: UNRECOGNIZED_MESSAGE,
+    errorCode: "unrecognized",
+  };
+}
+
+export function recordProcessedMessageTrace(
+  route: RouterResult,
+  result: HandlerResult,
+): void {
+  recordMessageTrace({
+    metadata: buildTraceMetadata(route, result),
+    output: buildTraceOutput(result),
+  });
 }
 
 function buildTraceOutput(result: HandlerResult): unknown {

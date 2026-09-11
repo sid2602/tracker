@@ -7,14 +7,24 @@ export const baseExpenseItemSchema = z.object({
   note: z.string().min(1),
 });
 
-export function buildExpenseResultSchema(categories: { name: string, description: string | null }[]) {
+export const expenseResultSchema = z.object({
+  items: z.array(
+    baseExpenseItemSchema.extend({
+      category: z.string().min(1),
+    }),
+  ).min(1),
+});
+
+export function buildExpenseResultSchema(
+  categories: { name: string; description: string | null }[],
+) {
   const categoryNames = categories.map((c) => c.name);
-  
-  // If there are no categories, provide a fallback or string
-  const categorySchema = categoryNames.length > 0 
-    ? z.enum([categoryNames[0], ...categoryNames.slice(1)] as any) 
-    : z.string();
-    
+
+  const categorySchema = z.string().min(1).refine(
+    (value) => categoryNames.length === 0 || categoryNames.includes(value),
+    "Category must be one of the configured categories",
+  );
+
   const itemSchema = baseExpenseItemSchema.extend({
     category: categorySchema,
   });
@@ -24,7 +34,5 @@ export function buildExpenseResultSchema(categories: { name: string, description
   });
 }
 
-// We cannot statically infer the exact type including the enum category,
-// so we define a base type and category as string for TypeScript.
 export type ExpenseItem = z.infer<typeof baseExpenseItemSchema> & { category: string };
-export type ExpenseResult = { items: ExpenseItem[] };
+export type ExpenseResult = z.infer<typeof expenseResultSchema>;
