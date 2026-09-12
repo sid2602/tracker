@@ -1,5 +1,11 @@
 # Implementation Phases: Signal Expense Tracker MVP
 
+> Historical snapshot. The transport and environment-variable examples below
+> describe the original WebSocket/REST wrapper. For current operations, use
+> [README](../../README.md), [architecture](../../architecture.md),
+> [.env.example](../../.env.example), and
+> [ADR 0006](../adr/0006-switch-to-raw-signal-cli.md).
+
 The sequence is based on dependencies and risks. Each phase concludes with verifying a working increment before moving to the next.
 
 ## MVP Scope

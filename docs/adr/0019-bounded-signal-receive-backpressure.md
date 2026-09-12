@@ -115,8 +115,9 @@ original arrival order.
 ### Positive
 
 - In-memory receive memory is bounded even while SQLite is unavailable.
-- TCP/readline backpressure prevents the application from accepting an
-  unlimited number of payloads into JavaScript memory.
+- TCP socket backpressure combined with the bounded `Buffer` newline framer
+  prevents the application from accepting an unlimited number of payloads into
+  JavaScript memory.
 - Receive order and “last expense” semantics remain deterministic across
   receiver retries and durable inbox processing.
 - Payloads are not intentionally dropped before they reach the durable inbox.

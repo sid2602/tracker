@@ -4,7 +4,8 @@ Date: 2026-09-03
 
 ## Status
 
-Accepted
+Accepted; the current state machine and recovery details are extended by
+[ADR 0015](0015-complete-durable-inbox-state-machine.md).
 
 ## Context
 
@@ -14,14 +15,14 @@ This approach has two major flaws:
 1. **Crash during processing**: If the application crashes (e.g., power loss, container restart) *after* receiving the message from Signal but *before* fully processing and persisting it, the message is permanently lost.
 2. **Double delivery (lack of idempotency)**: If Signal re-delivers a message or if the application receives the same payload twice (e.g., due to networking retries or restarting), it will be processed twice, potentially resulting in duplicate expenses being saved to the database.
 
-To achieve reliable processing (as outlined in Phase 1 of the project goals), we need a mechanism that decouples message reception from processing, ensures that every received message is eventually processed successfully, and guarantees that each message is processed exactly once.
+To achieve reliable processing (as outlined in Phase 1 of the project goals), we need a mechanism that decouples message reception from processing, ensures that every accepted message is eventually processed successfully, and provides idempotent, effectively-once business persistence.
 
 ## Decision
 
 We will implement a **Durable Inbox** pattern using a new `inbox` table in SQLite. 
 
 The flow will be:
-1. **Reception**: Upon receiving a message from the Signal WebSocket, the application immediately writes the raw payload into the `inbox` table with a `pending` status. This is done using `INSERT OR IGNORE` with a unique `message_key` (derived from the account, sender, device, and timestamp).
+1. **Reception**: Upon receiving a Signal JSON-RPC event over the raw TCP connection, the application immediately writes the raw payload into the `inbox` table with a `pending` status. The transaction assigns a monotonic `receive_sequence`; a duplicate `message_key` (derived from the account, sender, device, and timestamp) is ignored without masking other constraint failures.
 2. **Processing Loop**: A background asynchronous loop polling the `inbox` table will atomically lease a `pending` (or stalled) message using a random `lease_token` and a `lease_until` timestamp.
 3. **Execution**: The worker processes the leased message (calls the router, domain handlers, LLM).
 4. **Persistence & Reply**: 
@@ -32,14 +33,17 @@ The flow will be:
 
 ### Table Schema (`inbox`)
 - `message_key` (TEXT, PRIMARY KEY / UNIQUE)
+- `receive_sequence` (INTEGER, NOT NULL, UNIQUE)
 - `raw_envelope` (TEXT - JSON)
-- `status` (TEXT - `pending`, `analyzed`, `saved`, `confirmed`, `ignored`)
+- `status` (TEXT - `pending`, `analyzed`, `saved`, `confirmed`, `ignored`, `failed`)
 - `parsed_json` (TEXT - JSON)
 - `response_text` (TEXT)
 - `attempts` (INTEGER)
 - `next_attempt_at` (INTEGER)
 - `lease_until` (INTEGER)
 - `lease_token` (TEXT)
+- `last_error` (TEXT)
+- `failed_at` (INTEGER)
 - `received_at` (INTEGER)
 
 ## Consequences

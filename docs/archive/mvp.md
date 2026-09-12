@@ -1,5 +1,12 @@
 # MVP Plan: Signal Expense Tracker
 
+> Historical snapshot. This document describes the original WebSocket/REST
+> wrapper architecture and is not the current operations guide. The current
+> implementation uses raw TCP JSON-RPC with `signal-cli`; see
+> [README](../../README.md), [architecture](../../architecture.md), and
+> [ADR 0006](../adr/0006-switch-to-raw-signal-cli.md) for the active transport
+> and configuration.
+
 ## Goal
 
 You send a message to yourself in Signal, e.g. `groceries 15 PLN`, `gas station 15 PLN` or `generate expense report for this month`. The application recognizes the note type, saves the expense, or replies with a report. Random notes are ignored. Input can be in any language; bot responses are in English.
