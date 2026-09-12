@@ -97,6 +97,17 @@ describe("inbox", () => {
     },
   };
 
+  const secondValidPayload = {
+    envelope: {
+      source: "+15005550100",
+      sourceDevice: 1,
+      timestamp: 1_700_000_000_004,
+      dataMessage: {
+        message: "second test message",
+      },
+    },
+  };
+
   const unauthorizedPayload = {
     envelope: {
       source: "+48111111111",
@@ -169,6 +180,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: context.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(context),
         status,
         parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
@@ -186,6 +198,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+48111111111-1-1700000000003",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(unauthorizedPayload),
         status,
         parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
@@ -210,6 +223,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: legacyContext.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(legacyContext),
         status,
         parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
@@ -229,6 +243,62 @@ describe("inbox", () => {
     expect(items[0]?.status).toBe("pending");
     expect(items[0]?.raw_envelope).toBe(JSON.stringify(validPayload));
     expect(items[0]?.received_at).toBe(mockNowMs);
+  });
+
+  it("allocates durable receive sequences and scopes duplicates to message keys", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await saveToInbox(deps, validPayload);
+
+    const items = await db
+      .selectFrom("inbox")
+      .select(["message_key", "receive_sequence"])
+      .orderBy("receive_sequence", "asc")
+      .execute();
+    expect(items).toEqual([
+      {
+        message_key: "+15005550100-1-1700000000000",
+        receive_sequence: 1,
+      },
+      {
+        message_key: "+15005550100-1-1700000000004",
+        receive_sequence: 2,
+      },
+    ]);
+  });
+
+  it("does not let a newer ready item overtake an older retrying head", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await db
+      .updateTable("inbox")
+      .set({ next_attempt_at: mockNowMs + 60_000 })
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(false);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines an exhausted non-terminal head before newer work", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await db
+      .updateTable("inbox")
+      .set({ attempts: 5 })
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+
+    const head = await db
+      .selectFrom("inbox")
+      .select(["status", "failed_at"])
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .executeTakeFirstOrThrow();
+    expect(head.status).toBe("failed");
+    expect(head.failed_at).toBe(mockNowMs);
   });
 
   it("does not persist a regular dataMessage from another Signal account", async () => {
@@ -306,6 +376,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "pending",
         attempts: 0,
@@ -331,6 +402,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "analyzed",
         parsed_json: JSON.stringify(expenseAnalysis),
@@ -355,6 +427,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "saved",
         parsed_json: JSON.stringify(expenseAnalysis),
@@ -467,6 +540,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: legacyContext.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(legacyContext),
         status: "pending",
         attempts: 0,
@@ -494,6 +568,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: legacyContext.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(legacyContext),
         status: "pending",
         attempts: 0,

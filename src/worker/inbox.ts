@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import { logger } from "../lib/logger.js";
 import { classifyEnvelope } from "../signal/index.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
@@ -57,17 +58,33 @@ export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void
 
   const now = deps.now?.() ?? new Date();
 
-  await deps.db
-    .insertInto("inbox")
-    .ignore()
-    .values({
-      message_key: context.messageKey,
-      raw_envelope: rawEnvelope,
-      status: "pending",
-      attempts: 0,
-      received_at: now.getTime(),
-    })
-    .execute();
+  await deps.db.transaction().execute(async (trx) => {
+    const nextSequence = await trx
+      .selectFrom("inbox")
+      .select(sql<number>`COALESCE(MAX(receive_sequence), 0) + 1`.as("next_sequence"))
+      .executeTakeFirstOrThrow();
+
+    const result = await trx
+      .insertInto("inbox")
+      .values({
+        message_key: context.messageKey,
+        receive_sequence: Number(nextSequence.next_sequence),
+        raw_envelope: rawEnvelope,
+        status: "pending",
+        attempts: 0,
+        received_at: now.getTime(),
+      })
+      .onConflict((oc) => oc.column("message_key").doNothing())
+      .execute();
+    const insertedCount = result[0]?.numInsertedOrUpdatedRows;
+    if (insertedCount === undefined) {
+      throw new Error("Inbox insert did not report its affected row count");
+    }
+    const inserted = Number(insertedCount);
+    if (inserted !== 0 && inserted !== 1) {
+      throw new Error(`Inbox insert affected an unexpected number of rows: ${inserted}`);
+    }
+  });
 
   logger.info(
     {
@@ -89,26 +106,49 @@ export async function processNextInboxItem(
 
   const target = await deps.db
     .selectFrom("inbox")
-    .select("message_key")
+    .select(["message_key", "lease_until", "next_attempt_at", "attempts"])
     .where("status", "in", ["pending", "analyzed", "saved"])
-    .where((eb) =>
-      eb.or([
-        eb("lease_until", "is", null),
-        eb("lease_until", "<", nowMs),
-      ]),
-    )
-    .where((eb) =>
-      eb.or([
-        eb("next_attempt_at", "is", null),
-        eb("next_attempt_at", "<=", nowMs),
-      ]),
-    )
-    .where("attempts", "<", MAX_ATTEMPTS)
+    .orderBy("receive_sequence", "asc")
     .limit(1)
     .executeTakeFirst();
 
   if (!target) {
     return false;
+  }
+  if (
+    (target.lease_until !== null && target.lease_until >= nowMs) ||
+    (target.next_attempt_at !== null && target.next_attempt_at > nowMs)
+  ) {
+    return false;
+  }
+
+  if (target.attempts >= MAX_ATTEMPTS) {
+    const failed = await deps.db
+      .updateTable("inbox")
+      .set({
+        status: "failed",
+        failed_at: nowMs,
+        next_attempt_at: null,
+        lease_token: null,
+        lease_until: null,
+      })
+      .where("message_key", "=", target.message_key)
+      .where("status", "in", ["pending", "analyzed", "saved"])
+      .where("attempts", ">=", MAX_ATTEMPTS)
+      .where((eb) =>
+        eb.or([
+          eb("lease_until", "is", null),
+          eb("lease_until", "<", nowMs),
+        ]),
+      )
+      .where((eb) =>
+        eb.or([
+          eb("next_attempt_at", "is", null),
+          eb("next_attempt_at", "<=", nowMs),
+        ]),
+      )
+      .executeTakeFirst();
+    return failed.numUpdatedRows > 0n;
   }
 
   await options.beforeClaim?.(target.message_key);

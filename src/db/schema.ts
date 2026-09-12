@@ -17,6 +17,7 @@ export interface ExpenseTable {
 
 export interface InboxTable {
   message_key: string;
+  receive_sequence: number;
   raw_envelope: string;
   status:
     | "pending"

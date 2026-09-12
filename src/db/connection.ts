@@ -37,6 +37,7 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .createTable("inbox")
     .ifNotExists()
     .addColumn("message_key", "text", (col) => col.primaryKey())
+    .addColumn("receive_sequence", "integer", (col) => col.notNull())
     .addColumn("raw_envelope", "text", (col) => col.notNull())
     .addColumn("status", "text", (col) => col.notNull())
     .addColumn("parsed_json", "text")
@@ -72,6 +73,7 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     await db.schema.alterTable("inbox").addColumn("failed_at", "integer").execute();
   }
 
+  await migrateInboxReceiveSequence(db);
   await migrateLegacyExpenseUniqueConstraint(db);
 
   await db.schema
@@ -87,6 +89,14 @@ export async function initSchema(db: Kysely<AppDatabase>): Promise<void> {
     .ifNotExists()
     .on("inbox")
     .columns(["status", "next_attempt_at", "lease_until"])
+    .execute();
+
+  await db.schema
+    .createIndex("inbox_receive_sequence_unique")
+    .ifNotExists()
+    .unique()
+    .on("inbox")
+    .column("receive_sequence")
     .execute();
 
   await db.schema
@@ -145,10 +155,127 @@ type SqliteIndexColumn = {
   name: string;
 };
 
+type SqliteTableInfoRow = {
+  name: string;
+  notnull: number;
+};
+
 type DuplicateExpenseMessage = {
   source_message_key: string;
   item_index: number;
 };
+
+async function migrateInboxReceiveSequence(
+  db: Kysely<AppDatabase>,
+): Promise<void> {
+  const tableInfo = await sql<SqliteTableInfoRow>`
+    PRAGMA table_info("inbox")
+  `.execute(db);
+  const sequenceColumn = tableInfo.rows.find(
+    (column) => column.name === "receive_sequence",
+  );
+
+  if (!sequenceColumn || sequenceColumn.notnull !== 1) {
+    await rebuildInboxWithReceiveSequence(db);
+    return;
+  }
+
+  await db.transaction().execute(async (trx) => {
+    await createInboxReceiveSequenceIndex(trx);
+  });
+}
+
+async function rebuildInboxWithReceiveSequence(
+  db: Kysely<AppDatabase>,
+): Promise<void> {
+  await db.transaction().execute(async (trx) => {
+    await sql`ALTER TABLE "inbox" RENAME TO "inbox_legacy_sequence"`.execute(trx);
+    await sql`
+      CREATE TABLE "inbox" (
+        "message_key" TEXT PRIMARY KEY,
+        "receive_sequence" INTEGER NOT NULL,
+        "raw_envelope" TEXT NOT NULL,
+        "status" TEXT NOT NULL,
+        "parsed_json" TEXT,
+        "response_text" TEXT,
+        "attempts" INTEGER NOT NULL,
+        "next_attempt_at" INTEGER,
+        "lease_until" INTEGER,
+        "lease_token" TEXT,
+        "last_error" TEXT,
+        "failed_at" INTEGER,
+        "received_at" INTEGER NOT NULL
+      )
+    `.execute(trx);
+    await sql`
+      INSERT INTO "inbox" (
+        "message_key",
+        "receive_sequence",
+        "raw_envelope",
+        "status",
+        "parsed_json",
+        "response_text",
+        "attempts",
+        "next_attempt_at",
+        "lease_until",
+        "lease_token",
+        "last_error",
+        "failed_at",
+        "received_at"
+      )
+      SELECT
+        "message_key",
+        ROW_NUMBER() OVER (ORDER BY "received_at" ASC, "message_key" ASC),
+        "raw_envelope",
+        "status",
+        "parsed_json",
+        "response_text",
+        "attempts",
+        "next_attempt_at",
+        "lease_until",
+        "lease_token",
+        "last_error",
+        "failed_at",
+        "received_at"
+      FROM "inbox_legacy_sequence"
+    `.execute(trx);
+    await sql`DROP TABLE "inbox_legacy_sequence"`.execute(trx);
+    await createInboxReceiveSequenceIndex(trx);
+  });
+}
+
+async function createInboxReceiveSequenceIndex(
+  db: Kysely<AppDatabase>,
+): Promise<void> {
+  const indexes = await sql<SqliteIndexRow>`
+    PRAGMA index_list("inbox")
+  `.execute(db);
+  const existingIndex = indexes.rows.find(
+    (index) => index.name === "inbox_receive_sequence_unique",
+  );
+  if (existingIndex) {
+    const escapedName = existingIndex.name.replaceAll('"', '""');
+    const columns = await sql<SqliteIndexColumn>`
+      PRAGMA index_info(${sql.raw(`"${escapedName}"`)})
+    `.execute(db);
+    const columnNames = columns.rows.map((column) => column.name);
+    if (
+      existingIndex.unique !== 1 ||
+      columnNames.length !== 1 ||
+      columnNames[0] !== "receive_sequence"
+    ) {
+      throw new Error(
+        'Inbox index "inbox_receive_sequence_unique" has an invalid definition',
+      );
+    }
+    return;
+  }
+
+  await sql`
+    CREATE UNIQUE INDEX "inbox_receive_sequence_unique"
+    ON "inbox" ("receive_sequence")
+  `.execute(db);
+}
 
 async function migrateLegacyExpenseUniqueConstraint(
   db: Kysely<AppDatabase>,

@@ -41,15 +41,12 @@ async function main(): Promise<void> {
   process.once("SIGTERM", onShutdown);
 
   const inboxTask = runInboxProcessor(deps, abortController.signal);
-
-  listenForMessages(config, async (payload) => {
+  const listenerTask = listenForMessages(config, async (payload) => {
     await saveToInbox(deps, payload);
-  }, { signal: abortController.signal }).catch((err) => {
-    logger.error({ err }, "Fatal error in listenForMessages");
-    process.exit(1);
-  });
+  }, { signal: abortController.signal });
 
   await inboxTask;
+  await listenerTask;
 
   await shutdownTracing();
   await deps.db.destroy();
