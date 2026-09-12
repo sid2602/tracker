@@ -1,5 +1,10 @@
 import type { QueryCreator } from "kysely";
 import type { AppDatabase, CategoryTable } from "../../db/schema.js";
+import { UserInputError } from "../../worker/errors.js";
+import {
+  MAX_CATEGORY_DESCRIPTION_LENGTH,
+  MAX_CATEGORY_NAME_LENGTH,
+} from "./schema.js";
 
 export async function getAllCategories(
   db: QueryCreator<AppDatabase>,
@@ -32,6 +37,15 @@ export async function addCategory(
   description?: string | null,
 ): Promise<boolean> {
   const now = new Date().toISOString();
+  validateCategoryText(name, "category name");
+  if (
+    description !== null &&
+    description !== undefined &&
+    (description.length > MAX_CATEGORY_DESCRIPTION_LENGTH ||
+      hasControlCharacters(description))
+  ) {
+    throw new UserInputError("Category description is too long or invalid.");
+  }
   const normalizedName = normalizeCategoryName(name);
   
   const result = await db
@@ -51,6 +65,7 @@ export async function removeCategory(
   db: QueryCreator<AppDatabase>,
   name: string,
 ): Promise<boolean> {
+  validateCategoryText(name, "category name");
   const normalizedName = normalizeCategoryName(name);
   const result = await db
     .deleteFrom("categories")
@@ -58,4 +73,19 @@ export async function removeCategory(
     .executeTakeFirst();
     
   return result.numDeletedRows > 0n;
+}
+
+function validateCategoryText(value: string, label: string): void {
+  const normalized = normalizeCategoryName(value);
+  if (
+    normalized.length === 0 ||
+    normalized.length > MAX_CATEGORY_NAME_LENGTH ||
+    hasControlCharacters(value)
+  ) {
+    throw new UserInputError(`Invalid ${label}.`);
+  }
+}
+
+function hasControlCharacters(value: string): boolean {
+  return /[\u0000-\u001f\u007f]/u.test(value);
 }

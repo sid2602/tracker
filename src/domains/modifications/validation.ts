@@ -1,3 +1,6 @@
+import {
+  containsPromptInjectionMarker,
+} from "../../llm/prompt-data.js";
 import { UserInputError } from "../../worker/errors.js";
 import type { ModificationResult } from "./schema.js";
 
@@ -10,7 +13,7 @@ export function validateModificationAgainstRawText(
   referenceDate?: string,
 ): void {
   const normalizedText = normalizeText(rawText);
-  if (hasPromptInjectionMarkers(normalizedText)) {
+  if (containsPromptInjectionMarker(normalizedText)) {
     rejectUnsafeModification();
   }
   validateActionAgainstRawText(normalizedText, modification.action);
@@ -208,17 +211,6 @@ function addScannedId(
 function getSingleExplicitId(ids: number[]): number | null {
   const uniqueIds = [...new Set(ids)];
   return uniqueIds.length === 1 ? (uniqueIds[0] ?? null) : null;
-}
-
-function hasPromptInjectionMarkers(text: string): boolean {
-  return (
-    /\b(?:ignore|disregard|forget)\b.{0,40}\b(?:previous|prior|above)\b/u.test(
-      text,
-    ) ||
-    /(?:ignoruj|zignoruj|pomiń|pomin|omin)(?=$|[^\p{L}]).{0,40}(?:poprzednie|wcześniejsze|wczesniejsze)(?=$|[^\p{L}])/u.test(
-      text,
-    )
-  );
 }
 
 function validateActionAgainstRawText(

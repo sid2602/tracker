@@ -74,4 +74,10 @@ describe("categories repository", () => {
     const removed = await removeCategory(db, "pets");
     expect(removed).toBe(false);
   });
+
+  it("rejects oversized category descriptions", async () => {
+    await expect(
+      addCategory(db, "pets", "x".repeat(501)),
+    ).rejects.toThrow("description is too long");
+  });
 });

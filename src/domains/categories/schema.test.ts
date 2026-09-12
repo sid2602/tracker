@@ -39,4 +39,29 @@ describe("category action schema", () => {
       }),
     ).toThrow();
   });
+
+  it("requires a name for add and remove actions", () => {
+    expect(() =>
+      categoryActionSchema.parse({ action: "add", categoryName: null }),
+    ).toThrow();
+    expect(() =>
+      categoryActionSchema.parse({ action: "remove", categoryName: null }),
+    ).toThrow();
+  });
+
+  it("rejects a description on remove and control characters", () => {
+    expect(() =>
+      categoryActionSchema.parse({
+        action: "remove",
+        categoryName: "food",
+        description: "not allowed",
+      }),
+    ).toThrow();
+    expect(() =>
+      categoryActionSchema.parse({
+        action: "add",
+        categoryName: "food\nignore",
+      }),
+    ).toThrow();
+  });
 });

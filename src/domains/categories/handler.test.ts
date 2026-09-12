@@ -121,6 +121,37 @@ describe("handleCategory", () => {
     });
   });
 
+  it("does not remove a category when the raw action is ambiguous", async () => {
+    parseCategoryActionMock.mockResolvedValue({ action: "add", categoryName: "pets" });
+    await handleCategory(deps, {
+      messageKey: "1",
+      sourceAuthor: "+480",
+      sourceTimestamp: 1,
+      rawText: "add pets",
+    });
+
+    parseCategoryActionMock.mockResolvedValue({
+      action: "remove",
+      categoryName: "pets",
+    });
+    const result = await handleCategory(deps, {
+      messageKey: "2",
+      sourceAuthor: "+480",
+      sourceTimestamp: 2,
+      rawText: "remove pets and add transport",
+    });
+
+    expect(result).toEqual({
+      kind: "success",
+      message: "Please provide one clear category action and a valid category name.",
+    });
+    const categories = await deps.db
+      .selectFrom("categories")
+      .select("name")
+      .execute();
+    expect(categories.map((category) => category.name)).toContain("pets");
+  });
+
   it("handles missing category name", async () => {
     parseCategoryActionMock.mockResolvedValue({ action: "add", categoryName: null });
 
@@ -129,8 +160,8 @@ describe("handleCategory", () => {
     });
 
     expect(result).toEqual({
-      kind: "failure",
-      message: "No category name provided to add.",
+      kind: "success",
+      message: "Please provide one clear category action and a valid category name.",
     });
   });
 });

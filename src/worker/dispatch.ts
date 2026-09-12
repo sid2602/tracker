@@ -24,6 +24,7 @@ import type { QueryCreator } from "kysely";
 import type { AppDatabase } from "../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
 import type { MessageAnalysis } from "./analysis.js";
+import { isUserInputError } from "./errors.js";
 
 export async function dispatchMessage(
   deps: AppDeps,
@@ -91,9 +92,9 @@ export async function persistAnalyzedMessage(
     case "expense":
       return persistExpense(db, context, analysis.parsed);
     case "report":
-      return persistReport(db, analysis.parsed);
+      return persistReport(db, context.rawText, analysis.parsed);
     case "category":
-      return persistCategory(db, analysis.parsed);
+      return persistCategory(db, context.rawText, analysis.parsed);
     case "modification":
       return persistModification(db, context, analysis.parsed);
     case "ignore":
@@ -105,12 +106,22 @@ export async function processMessage(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  const route = await routeMessage(deps.config, context.rawText);
-  logger.info({ route }, "routed message intent");
-  const result = await dispatchMessage(deps, context, route);
-  const finalResult = normalizeHandlerResult(result);
-  recordProcessedMessageTrace(route, finalResult);
-  return finalResult;
+  try {
+    const route = await routeMessage(deps.config, context.rawText);
+    logger.info({ route }, "routed message intent");
+    const result = await dispatchMessage(deps, context, route);
+    const finalResult = normalizeHandlerResult(result);
+    recordProcessedMessageTrace(route, finalResult);
+    return finalResult;
+  } catch (error: unknown) {
+    if (isUserInputError(error)) {
+      return {
+        kind: "success",
+        message: error.userMessage,
+      };
+    }
+    throw error;
+  }
 }
 
 export function normalizeHandlerResult(result: HandlerResult): HandlerResult {

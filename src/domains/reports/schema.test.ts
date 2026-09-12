@@ -48,4 +48,33 @@ describe("reports schema", () => {
 
     expect(result.group_by).toBe("list");
   });
+
+  it("rejects invalid dates, reversed ranges, and oversized titles", () => {
+    expect(() =>
+      reportParamsSchema.parse({
+        start_date: "2026-02-30",
+        end_date: "2026-03-01",
+        title: "Invalid date",
+        group_by: "total",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      reportParamsSchema.parse({
+        start_date: "2026-09-30",
+        end_date: "2026-09-01",
+        title: "Reversed",
+        group_by: "total",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      reportParamsSchema.parse({
+        start_date: "2026-09-01",
+        end_date: "2026-09-30",
+        title: "x".repeat(201),
+        group_by: "total",
+      }),
+    ).toThrow();
+  });
 });
