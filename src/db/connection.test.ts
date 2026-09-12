@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { sql, type Kysely } from "kysely";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { initSchema, openDatabase } from "./connection.js";
 import type { AppDatabase } from "./schema.js";
 import { insertExpenses } from "../domains/expenses/repository.js";
@@ -15,9 +18,14 @@ type IndexColumn = {
 
 describe("database migrations", () => {
   let db: Kysely<AppDatabase> | undefined;
+  let databaseDirectory: string | undefined;
 
   afterEach(async () => {
     await db?.destroy();
+    if (databaseDirectory) {
+      rmSync(databaseDirectory, { recursive: true, force: true });
+      databaseDirectory = undefined;
+    }
   });
 
   async function assertIndex(
@@ -69,6 +77,25 @@ describe("database migrations", () => {
       ["source_message_key", "item_index"],
     );
   }
+
+  it("configures durable SQLite pragmas for file databases", async () => {
+    databaseDirectory = mkdtempSync(join(tmpdir(), "tracker-sqlite-"));
+    db = openDatabase(join(databaseDirectory, "expenses.db"));
+
+    const journalMode = await sql<{ journal_mode: string }>`
+      PRAGMA journal_mode
+    `.execute(db);
+    const synchronous = await sql<{ synchronous: number }>`
+      PRAGMA synchronous
+    `.execute(db);
+    const busyTimeout = await sql<{ timeout: number }>`
+      PRAGMA busy_timeout
+    `.execute(db);
+
+    expect(journalMode.rows[0]?.journal_mode).toBe("wal");
+    expect(synchronous.rows[0]?.synchronous).toBe(2);
+    expect(busyTimeout.rows[0]?.timeout).toBe(5_000);
+  });
 
   it("creates the queue and reporting indexes on a fresh database", async () => {
     db = openDatabase(":memory:");

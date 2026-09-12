@@ -7,9 +7,14 @@ import { migrateSchema } from "./migrations.js";
 import { seedDefaultCategories } from "./seeds.js";
 import type { AppDatabase } from "./schema.js";
 
+const SQLITE_BUSY_TIMEOUT_MS = 5_000;
+
 export function openDatabase(path: string): Kysely<AppDatabase> {
   mkdirSync(dirname(path), { recursive: true });
   const db = new Database(path);
+  db.pragma("journal_mode = WAL");
+  db.pragma("synchronous = FULL");
+  db.pragma(`busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   return new Kysely<AppDatabase>({
     dialect: new SqliteDialect({
       database: db,
