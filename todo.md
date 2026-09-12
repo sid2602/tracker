@@ -65,3 +65,30 @@ synthetic Signal envelope
 - [x] Domain outcomes and captured responses are asserted.
 - [x] Tests can run in parallel without shared mutable state.
 - [x] `npm run verify` and `npm run test:workflow` pass.
+
+## Maintainability refactor — ADR 0020
+
+### Refactor stage 1 — shared harness and expense/report scenarios
+
+- [x] Add `src/worker/application-workflow/harness.ts`.
+- [x] Move expense and report scenarios into
+      `expense-report.integration.test.ts`.
+- [x] Keep ESM mock registration and dynamic workflow imports inside the
+      harness.
+- [ ] Review the stage with the second agent.
+
+### Refactor stage 2 — remaining scenario files
+
+- [x] Add catalog/modification scenarios.
+- [x] Add routing/ignore scenarios.
+- [x] Add failure/recovery scenarios.
+- [ ] Review the stage with the second agent.
+
+### Refactor stage 3 — remove monolith and wire tooling
+
+- [x] Remove `application-workflow.integration.test.ts`.
+- [x] Exclude the workflow subtree from `tsconfig.build.json`.
+- [x] Update `test:workflow` to the verified directory selector.
+- [x] Run `npm run build`, `npm run typecheck`, `npm run test:workflow`, and
+      `npm run verify`.
+- [x] Review the final refactor with the second agent.
