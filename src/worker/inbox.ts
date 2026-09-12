@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import { logger } from "../lib/logger.js";
 import { classifyEnvelope } from "../signal/index.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
@@ -24,6 +25,8 @@ const POLL_INTERVAL_MS = 1_000;
 const RETRY_BASE_DELAY_MS = 15_000;
 const SELF_ECHO_IGNORED_REASON = "self_echo_ignored";
 const SELF_ECHO_REVIEW_REASON = "self_echo_requires_manual_review";
+const UNAUTHORIZED_IGNORED_REASON = "unauthorized_author_ignored";
+const UNAUTHORIZED_REVIEW_REASON = "unauthorized_requires_manual_review";
 
 type InboxStatus =
   | "pending"
@@ -55,17 +58,33 @@ export async function saveToInbox(deps: AppDeps, payload: unknown): Promise<void
 
   const now = deps.now?.() ?? new Date();
 
-  await deps.db
-    .insertInto("inbox")
-    .ignore()
-    .values({
-      message_key: context.messageKey,
-      raw_envelope: rawEnvelope,
-      status: "pending",
-      attempts: 0,
-      received_at: now.getTime(),
-    })
-    .execute();
+  await deps.db.transaction().execute(async (trx) => {
+    const nextSequence = await trx
+      .selectFrom("inbox")
+      .select(sql<number>`COALESCE(MAX(receive_sequence), 0) + 1`.as("next_sequence"))
+      .executeTakeFirstOrThrow();
+
+    const result = await trx
+      .insertInto("inbox")
+      .values({
+        message_key: context.messageKey,
+        receive_sequence: Number(nextSequence.next_sequence),
+        raw_envelope: rawEnvelope,
+        status: "pending",
+        attempts: 0,
+        received_at: now.getTime(),
+      })
+      .onConflict((oc) => oc.column("message_key").doNothing())
+      .execute();
+    const insertedCount = result[0]?.numInsertedOrUpdatedRows;
+    if (insertedCount === undefined) {
+      throw new Error("Inbox insert did not report its affected row count");
+    }
+    const inserted = Number(insertedCount);
+    if (inserted !== 0 && inserted !== 1) {
+      throw new Error(`Inbox insert affected an unexpected number of rows: ${inserted}`);
+    }
+  });
 
   logger.info(
     {
@@ -87,26 +106,49 @@ export async function processNextInboxItem(
 
   const target = await deps.db
     .selectFrom("inbox")
-    .select("message_key")
+    .select(["message_key", "lease_until", "next_attempt_at", "attempts"])
     .where("status", "in", ["pending", "analyzed", "saved"])
-    .where((eb) =>
-      eb.or([
-        eb("lease_until", "is", null),
-        eb("lease_until", "<", nowMs),
-      ]),
-    )
-    .where((eb) =>
-      eb.or([
-        eb("next_attempt_at", "is", null),
-        eb("next_attempt_at", "<=", nowMs),
-      ]),
-    )
-    .where("attempts", "<", MAX_ATTEMPTS)
+    .orderBy("receive_sequence", "asc")
     .limit(1)
     .executeTakeFirst();
 
   if (!target) {
     return false;
+  }
+  if (
+    (target.lease_until !== null && target.lease_until >= nowMs) ||
+    (target.next_attempt_at !== null && target.next_attempt_at > nowMs)
+  ) {
+    return false;
+  }
+
+  if (target.attempts >= MAX_ATTEMPTS) {
+    const failed = await deps.db
+      .updateTable("inbox")
+      .set({
+        status: "failed",
+        failed_at: nowMs,
+        next_attempt_at: null,
+        lease_token: null,
+        lease_until: null,
+      })
+      .where("message_key", "=", target.message_key)
+      .where("status", "in", ["pending", "analyzed", "saved"])
+      .where("attempts", ">=", MAX_ATTEMPTS)
+      .where((eb) =>
+        eb.or([
+          eb("lease_until", "is", null),
+          eb("lease_until", "<", nowMs),
+        ]),
+      )
+      .where((eb) =>
+        eb.or([
+          eb("next_attempt_at", "is", null),
+          eb("next_attempt_at", "<=", nowMs),
+        ]),
+      )
+      .executeTakeFirst();
+    return failed.numUpdatedRows > 0n;
   }
 
   await options.beforeClaim?.(target.message_key);
@@ -159,6 +201,10 @@ export async function processNextInboxItem(
     });
     if (storedMessage.kind === "self_echo") {
       await handleHistoricalSelfEcho(deps, item, leaseToken);
+      return true;
+    }
+    if (storedMessage.kind === "unauthorized") {
+      await handleHistoricalUnauthorized(deps, item, leaseToken);
       return true;
     }
     if (storedMessage.kind === "quarantine") {
@@ -360,6 +406,75 @@ async function handleHistoricalSelfEcho(
   }
 }
 
+async function handleHistoricalUnauthorized(
+  deps: AppDeps,
+  item: {
+    message_key: string;
+    status: InboxStatus;
+  },
+  leaseToken: string,
+): Promise<void> {
+  if (item.status === "saved") {
+    const quarantined = await deps.db
+      .updateTable("inbox")
+      .set({
+        status: "failed",
+        last_error: UNAUTHORIZED_REVIEW_REASON,
+        failed_at: (deps.now?.() ?? new Date()).getTime(),
+        next_attempt_at: null,
+        lease_token: null,
+        lease_until: null,
+      })
+      .where("message_key", "=", item.message_key)
+      .where("status", "=", "saved")
+      .where("lease_token", "=", leaseToken)
+      .executeTakeFirst();
+
+    if (quarantined.numUpdatedRows === 0n) {
+      throw new Error("Inbox lease was lost while quarantining unauthorized message");
+    }
+
+    logger.warn(
+      { messageKey: item.message_key },
+      "Historical saved unauthorized message quarantined for manual review",
+    );
+    return;
+  }
+
+  if (item.status !== "pending" && item.status !== "analyzed") {
+    throw new Error(`Cannot clean up unauthorized message in ${item.status} state`);
+  }
+
+  const ignored = await deps.db
+    .updateTable("inbox")
+    .set({
+      status: "ignored",
+      parsed_json: serializeMessageAnalysis({
+        version: 1,
+        intent: "ignore",
+      }),
+      response_text: null,
+      last_error: UNAUTHORIZED_IGNORED_REASON,
+      failed_at: null,
+      next_attempt_at: null,
+      lease_token: null,
+      lease_until: null,
+    })
+    .where("message_key", "=", item.message_key)
+    .where("status", "in", ["pending", "analyzed"])
+    .where("lease_token", "=", leaseToken)
+    .executeTakeFirst();
+
+  if (ignored.numUpdatedRows === 0n) {
+    throw new Error("Inbox lease was lost while ignoring unauthorized message");
+  }
+
+  logger.warn(
+    { messageKey: item.message_key },
+    "Historical unauthorized message ignored",
+  );
+}
+
 async function quarantineHistoricalMessage(
   deps: AppDeps,
   item: {
@@ -538,6 +653,7 @@ async function scheduleRetry(
 type StoredMessage =
   | { kind: "inbound"; context: MessageContext }
   | { kind: "self_echo" }
+  | { kind: "unauthorized" }
   | { kind: "quarantine" }
   | { kind: "invalid" };
 
@@ -554,6 +670,9 @@ function deserializeStoredMessage(
     if (classification.kind === "self_echo") {
       return { kind: "self_echo" };
     }
+    if (classification.kind === "unauthorized") {
+      return { kind: "unauthorized" };
+    }
     if (classification.kind === "inbound") {
       return { kind: "inbound", context: classification.context };
     }
@@ -564,19 +683,21 @@ function deserializeStoredMessage(
     }
 
     if (
-      envelopeOptions.selfNumber !== undefined &&
-      legacyContext.sourceAuthor === envelopeOptions.selfNumber
+      envelopeOptions.selfNumber === undefined ||
+      legacyContext.sourceAuthor !== envelopeOptions.selfNumber
     ) {
-      const legacySourceDevice = parseLegacySourceDevice(legacyContext);
-      if (legacySourceDevice === null) {
-        return { kind: "quarantine" };
-      }
-      if (
-        envelopeOptions.allowedInputDeviceIds === undefined ||
-        !envelopeOptions.allowedInputDeviceIds.includes(legacySourceDevice)
-      ) {
-        return { kind: "self_echo" };
-      }
+      return { kind: "unauthorized" };
+    }
+
+    const legacySourceDevice = parseLegacySourceDevice(legacyContext);
+    if (legacySourceDevice === null) {
+      return { kind: "quarantine" };
+    }
+    if (
+      envelopeOptions.allowedInputDeviceIds === undefined ||
+      !envelopeOptions.allowedInputDeviceIds.includes(legacySourceDevice)
+    ) {
+      return { kind: "self_echo" };
     }
 
     return { kind: "inbound", context: legacyContext };

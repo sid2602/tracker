@@ -3,6 +3,10 @@ import { classifyEnvelope, parseEnvelope } from "./envelope.js";
 
 const SOURCE_AUTHOR = "+15005550100";
 const SOURCE_TIMESTAMP = 1_700_000_000_000;
+const AUTHORIZED_OPTIONS = {
+  selfNumber: SOURCE_AUTHOR,
+  allowedInputDeviceIds: [1],
+};
 
 describe("parseEnvelope", () => {
   it("reads a native dataMessage envelope", () => {
@@ -10,14 +14,15 @@ describe("parseEnvelope", () => {
       parseEnvelope({
         envelope: {
           source: SOURCE_AUTHOR,
+          sourceDevice: 1,
           timestamp: SOURCE_TIMESTAMP,
           dataMessage: {
             message: "groceries 15 pln",
           },
         },
-      }),
+      }, AUTHORIZED_OPTIONS),
     ).toEqual({
-      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-1-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "groceries 15 pln",
     });
@@ -29,14 +34,15 @@ describe("parseEnvelope", () => {
         envelope: {
           source: "uuid-or-name",
           sourceNumber: SOURCE_AUTHOR,
+          sourceDevice: 1,
           timestamp: SOURCE_TIMESTAMP,
           dataMessage: {
             message: "fuel 40 pln",
           },
         },
-      }),
+      }, AUTHORIZED_OPTIONS),
     ).toEqual({
-      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-1-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "fuel 40 pln",
     });
@@ -50,15 +56,16 @@ describe("parseEnvelope", () => {
         params: {
           envelope: {
             source: SOURCE_AUTHOR,
+            sourceDevice: 1,
             timestamp: SOURCE_TIMESTAMP,
             dataMessage: {
               message: "report this month",
             },
           },
         },
-      }),
+      }, AUTHORIZED_OPTIONS),
     ).toEqual({
-      messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
+      messageKey: "+15005550100-1-1700000000000", sourceAuthor: SOURCE_AUTHOR,
       sourceTimestamp: SOURCE_TIMESTAMP,
       rawText: "report this month",
     });
@@ -86,6 +93,7 @@ describe("parseEnvelope", () => {
       classifyEnvelope({
         envelope: {
           source: SOURCE_AUTHOR,
+          sourceDevice: 1,
           timestamp: SOURCE_TIMESTAMP,
           dataMessage: {
             message: "groceries 15 pln",
@@ -96,15 +104,138 @@ describe("parseEnvelope", () => {
             },
           },
         },
-      }),
+      }, AUTHORIZED_OPTIONS),
     ).toEqual({
       kind: "inbound",
       context: {
-        messageKey: "+15005550100-0-1700000000000", sourceAuthor: SOURCE_AUTHOR,
+        messageKey: "+15005550100-1-1700000000000", sourceAuthor: SOURCE_AUTHOR,
         sourceTimestamp: SOURCE_TIMESTAMP,
         rawText: "groceries 15 pln",
       },
     });
+  });
+
+  it("rejects a regular dataMessage from another Signal account", () => {
+    const payload = {
+      envelope: {
+        source: "+48111111111",
+        sourceDevice: 1,
+        timestamp: SOURCE_TIMESTAMP + 6,
+        dataMessage: {
+          message: "groceries 15 pln",
+        },
+      },
+    };
+
+    expect(classifyEnvelope(payload, AUTHORIZED_OPTIONS)).toEqual({
+      kind: "unauthorized",
+    });
+    expect(parseEnvelope(payload, AUTHORIZED_OPTIONS)).toBeNull();
+  });
+
+  it("does not fall back to a self echo when an unauthorized dataMessage is present", () => {
+    expect(
+      classifyEnvelope(
+        {
+          envelope: {
+            source: "+48111111111",
+            sourceDevice: 1,
+            timestamp: SOURCE_TIMESTAMP + 7,
+            dataMessage: {
+              message: "foreign command",
+            },
+            syncMessage: {
+              sentMessage: {
+                destinationNumber: SOURCE_AUTHOR,
+                message: "Saved 1 item",
+              },
+            },
+          },
+        },
+        AUTHORIZED_OPTIONS,
+      ),
+    ).toEqual({ kind: "unauthorized" });
+  });
+
+  it("does not fall back to a self-chat message when dataMessage is malformed", () => {
+    expect(
+      classifyEnvelope(
+        {
+          envelope: {
+            source: SOURCE_AUTHOR,
+            sourceDevice: 1,
+            timestamp: SOURCE_TIMESTAMP + 8,
+            dataMessage: {},
+            syncMessage: {
+              sentMessage: {
+                destinationNumber: SOURCE_AUTHOR,
+                message: "Saved 1 item",
+              },
+            },
+          },
+        },
+        AUTHORIZED_OPTIONS,
+      ),
+    ).toEqual({ kind: "irrelevant" });
+  });
+
+  it("fails closed when a dataMessage is classified without the account identity", () => {
+    expect(
+      classifyEnvelope({
+        envelope: {
+          source: SOURCE_AUTHOR,
+          sourceDevice: 1,
+          timestamp: SOURCE_TIMESTAMP + 9,
+          dataMessage: {
+            message: "foreign command",
+          },
+        },
+      }),
+    ).toEqual({ kind: "unauthorized" });
+  });
+
+  it("accepts a regular self dataMessage from an allowlisted device", () => {
+    expect(
+      classifyEnvelope(
+        {
+          envelope: {
+            source: SOURCE_AUTHOR,
+            sourceDevice: 1,
+            timestamp: SOURCE_TIMESTAMP + 10,
+            dataMessage: {
+              message: "self expense",
+            },
+          },
+        },
+        AUTHORIZED_OPTIONS,
+      ),
+    ).toEqual({
+      kind: "inbound",
+      context: {
+        messageKey: "+15005550100-1-1700000000010",
+        sourceAuthor: SOURCE_AUTHOR,
+        sourceTimestamp: SOURCE_TIMESTAMP + 10,
+        rawText: "self expense",
+      },
+    });
+  });
+
+  it("ignores a regular self dataMessage from an unallowlisted device", () => {
+    expect(
+      classifyEnvelope(
+        {
+          envelope: {
+            source: SOURCE_AUTHOR,
+            sourceDevice: 2,
+            timestamp: SOURCE_TIMESTAMP + 11,
+            dataMessage: {
+              message: "bot or unknown device",
+            },
+          },
+        },
+        AUTHORIZED_OPTIONS,
+      ),
+    ).toEqual({ kind: "self_echo" });
   });
 
   it("accepts a self-chat message sent from a different device", () => {

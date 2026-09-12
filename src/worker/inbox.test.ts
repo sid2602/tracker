@@ -97,6 +97,28 @@ describe("inbox", () => {
     },
   };
 
+  const secondValidPayload = {
+    envelope: {
+      source: "+15005550100",
+      sourceDevice: 1,
+      timestamp: 1_700_000_000_004,
+      dataMessage: {
+        message: "second test message",
+      },
+    },
+  };
+
+  const unauthorizedPayload = {
+    envelope: {
+      source: "+48111111111",
+      sourceDevice: 1,
+      timestamp: 1_700_000_000_003,
+      dataMessage: {
+        message: "foreign command",
+      },
+    },
+  };
+
   const selfEchoPayload = {
     envelope: {
       source: "+15005550100",
@@ -158,10 +180,54 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: context.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(context),
         status,
         parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
         response_text: status === "saved" ? "Already saved" : null,
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+  }
+
+  async function insertHistoricalUnauthorized(
+    status: "pending" | "analyzed" | "saved",
+  ): Promise<void> {
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: "+48111111111-1-1700000000003",
+        receive_sequence: 1,
+        raw_envelope: JSON.stringify(unauthorizedPayload),
+        status,
+        parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
+        response_text: status === "saved" ? "Do not deliver" : null,
+        attempts: 0,
+        received_at: mockNowMs,
+      })
+      .execute();
+  }
+
+  async function insertLegacyUnauthorized(
+    status: "pending" | "analyzed" | "saved",
+  ): Promise<void> {
+    const legacyContext = {
+      messageKey: "+48111111111-1-1700000000003",
+      sourceAuthor: "+48111111111",
+      sourceTimestamp: 1_700_000_000_003,
+      rawText: "foreign legacy command",
+    };
+
+    await db
+      .insertInto("inbox")
+      .values({
+        message_key: legacyContext.messageKey,
+        receive_sequence: 1,
+        raw_envelope: JSON.stringify(legacyContext),
+        status,
+        parsed_json: status === "pending" ? null : JSON.stringify(expenseAnalysis),
+        response_text: status === "saved" ? "Do not deliver" : null,
         attempts: 0,
         received_at: mockNowMs,
       })
@@ -177,6 +243,115 @@ describe("inbox", () => {
     expect(items[0]?.status).toBe("pending");
     expect(items[0]?.raw_envelope).toBe(JSON.stringify(validPayload));
     expect(items[0]?.received_at).toBe(mockNowMs);
+  });
+
+  it("allocates durable receive sequences and scopes duplicates to message keys", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await saveToInbox(deps, validPayload);
+
+    const items = await db
+      .selectFrom("inbox")
+      .select(["message_key", "receive_sequence"])
+      .orderBy("receive_sequence", "asc")
+      .execute();
+    expect(items).toEqual([
+      {
+        message_key: "+15005550100-1-1700000000000",
+        receive_sequence: 1,
+      },
+      {
+        message_key: "+15005550100-1-1700000000004",
+        receive_sequence: 2,
+      },
+    ]);
+  });
+
+  it("does not let a newer ready item overtake an older retrying head", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await db
+      .updateTable("inbox")
+      .set({ next_attempt_at: mockNowMs + 60_000 })
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(false);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines an exhausted non-terminal head before newer work", async () => {
+    await saveToInbox(deps, validPayload);
+    await saveToInbox(deps, secondValidPayload);
+    await db
+      .updateTable("inbox")
+      .set({ attempts: 5 })
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .execute();
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+
+    const head = await db
+      .selectFrom("inbox")
+      .select(["status", "failed_at"])
+      .where("message_key", "=", "+15005550100-1-1700000000000")
+      .executeTakeFirstOrThrow();
+    expect(head.status).toBe("failed");
+    expect(head.failed_at).toBe(mockNowMs);
+  });
+
+  it("does not persist a regular dataMessage from another Signal account", async () => {
+    await saveToInbox(deps, unauthorizedPayload);
+
+    const items = await db.selectFrom("inbox").selectAll().execute();
+    expect(items).toHaveLength(0);
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a historical pending unauthorized message without processing it", async () => {
+    await insertHistoricalUnauthorized("pending");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.parsed_json).toBe(JSON.stringify({ version: 1, intent: "ignore" }));
+    expect(item.last_error).toBe("unauthorized_author_ignored");
+    expect(item.lease_token).toBeNull();
+    expect(item.lease_until).toBeNull();
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a historical analyzed unauthorized message without processing it", async () => {
+    await insertHistoricalUnauthorized("analyzed");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.last_error).toBe("unauthorized_author_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines a historical saved unauthorized message without sending it", async () => {
+    await insertHistoricalUnauthorized("saved");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("failed");
+    expect(item.last_error).toBe("unauthorized_requires_manual_review");
+    expect(item.failed_at).toBe(mockNowMs);
+    expect(item.response_text).toBe("Do not deliver");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
   it("does not persist a new sync sentMessage self-echo", async () => {
@@ -201,6 +376,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "pending",
         attempts: 0,
@@ -226,6 +402,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "analyzed",
         parsed_json: JSON.stringify(expenseAnalysis),
@@ -250,6 +427,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: "+15005550100-1-1700000000001",
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(selfEchoPayload),
         status: "saved",
         parsed_json: JSON.stringify(expenseAnalysis),
@@ -311,6 +489,46 @@ describe("inbox", () => {
     expect(sendMessageMock).not.toHaveBeenCalled();
   });
 
+  it("ignores a legacy normalized unauthorized message", async () => {
+    await insertLegacyUnauthorized("pending");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.last_error).toBe("unauthorized_author_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores an analyzed legacy normalized unauthorized message", async () => {
+    await insertLegacyUnauthorized("analyzed");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("ignored");
+    expect(item.last_error).toBe("unauthorized_author_ignored");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
+  it("quarantines a saved legacy normalized unauthorized message", async () => {
+    await insertLegacyUnauthorized("saved");
+
+    await expect(processNextInboxItem(deps)).resolves.toBe(true);
+
+    const item = await db.selectFrom("inbox").selectAll().executeTakeFirstOrThrow();
+    expect(item.status).toBe("failed");
+    expect(item.last_error).toBe("unauthorized_requires_manual_review");
+    expect(item.failed_at).toBe(mockNowMs);
+    expect(item.response_text).toBe("Do not deliver");
+    expect(analyzeMessageMock).not.toHaveBeenCalled();
+    expect(persistAnalyzedMessageMock).not.toHaveBeenCalled();
+    expect(sendMessageMock).not.toHaveBeenCalled();
+  });
+
   it("quarantines an unparseable legacy self-account payload", async () => {
     const legacyContext = {
       messageKey: "legacy-message",
@@ -322,6 +540,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: legacyContext.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(legacyContext),
         status: "pending",
         attempts: 0,
@@ -349,6 +568,7 @@ describe("inbox", () => {
       .insertInto("inbox")
       .values({
         message_key: legacyContext.messageKey,
+        receive_sequence: 1,
         raw_envelope: JSON.stringify(legacyContext),
         status: "pending",
         attempts: 0,

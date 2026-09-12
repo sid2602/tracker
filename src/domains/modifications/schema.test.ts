@@ -56,4 +56,61 @@ describe("modifications schema", () => {
       })
     ).toThrow();
   });
+
+  it("rejects an ID target without a positive ID", () => {
+    expect(() =>
+      modificationResultSchema.parse({
+        action: "delete",
+        target: "id",
+        id: 0,
+      }),
+    ).toThrow();
+  });
+
+  it("rejects a specific target without real criteria", () => {
+    expect(() =>
+      modificationResultSchema.parse({
+        action: "delete",
+        target: "specific",
+        searchCriteria: {},
+        selection: "last",
+      }),
+    ).toThrow();
+  });
+
+  it("accepts an exact date with a selection operator", () => {
+    const result = modificationResultSchema.parse({
+      action: "delete",
+      target: "specific",
+      searchCriteria: {
+        occurredOn: "2026-09-11",
+      },
+      selection: "first",
+    });
+
+    expect(result.searchCriteria?.occurredOn).toBe("2026-09-11");
+    expect(result.selection).toBe("first");
+  });
+
+  it("rejects invalid calendar dates", () => {
+    expect(() =>
+      modificationResultSchema.parse({
+        action: "delete",
+        target: "specific",
+        searchCriteria: {
+          occurredOn: "2026-02-30",
+        },
+      }),
+    ).toThrow();
+  });
+
+  it("rejects an update without any update value", () => {
+    expect(() =>
+      modificationResultSchema.parse({
+        action: "update",
+        target: "last",
+        updatePayload: {},
+      }),
+    ).toThrow();
+  });
 });

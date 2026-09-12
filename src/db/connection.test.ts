@@ -51,6 +51,12 @@ describe("database migrations", () => {
       ["status", "next_attempt_at", "lease_until"],
     );
     await assertIndex(
+      "inbox",
+      "inbox_receive_sequence_unique",
+      1,
+      ["receive_sequence"],
+    );
+    await assertIndex(
       "expenses",
       "expenses_reporting_idx",
       0,
@@ -70,6 +76,97 @@ describe("database migrations", () => {
     await initSchema(db);
 
     await assertRequiredIndexes();
+  });
+
+  it("backfills receive sequences deterministically and reruns idempotently", async () => {
+    db = openDatabase(":memory:");
+
+    await db.schema
+      .createTable("inbox")
+      .addColumn("message_key", "text", (column) => column.primaryKey())
+      .addColumn("raw_envelope", "text", (column) => column.notNull())
+      .addColumn("status", "text", (column) => column.notNull())
+      .addColumn("parsed_json", "text")
+      .addColumn("response_text", "text")
+      .addColumn("attempts", "integer", (column) => column.notNull())
+      .addColumn("next_attempt_at", "integer")
+      .addColumn("lease_until", "integer")
+      .addColumn("lease_token", "text")
+      .addColumn("received_at", "integer", (column) => column.notNull())
+      .execute();
+    await sql`
+      INSERT INTO "inbox" (
+        "message_key",
+        "raw_envelope",
+        "status",
+        "attempts",
+        "received_at"
+      )
+      VALUES
+        ('later', '{}', 'pending', 0, 20),
+        ('earlier', '{}', 'pending', 0, 10)
+    `.execute(db);
+
+    await initSchema(db);
+    await initSchema(db);
+
+    const rows = await db
+      .selectFrom("inbox")
+      .select(["message_key", "receive_sequence"])
+      .orderBy("receive_sequence", "asc")
+      .execute();
+    expect(rows).toEqual([
+      { message_key: "earlier", receive_sequence: 1 },
+      { message_key: "later", receive_sequence: 2 },
+    ]);
+    await assertRequiredIndexes();
+  });
+
+  it("enforces non-null and unique receive sequences", async () => {
+    db = openDatabase(":memory:");
+    await initSchema(db);
+
+    await expect(
+      db
+        .insertInto("inbox")
+        .values({
+          message_key: "first",
+          receive_sequence: 1,
+          raw_envelope: "{}",
+          status: "pending",
+          attempts: 0,
+          received_at: 1,
+        })
+        .execute(),
+    ).resolves.toBeDefined();
+
+    await expect(
+      db
+        .insertInto("inbox")
+        .values({
+          message_key: "duplicate-sequence",
+          receive_sequence: 1,
+          raw_envelope: "{}",
+          status: "pending",
+          attempts: 0,
+          received_at: 2,
+        })
+        .execute(),
+    ).rejects.toThrow();
+  });
+
+  it("rejects a partially migrated receive-sequence index", async () => {
+    db = openDatabase(":memory:");
+    await initSchema(db);
+    await sql`DROP INDEX "inbox_receive_sequence_unique"`.execute(db);
+    await sql`
+      CREATE INDEX "inbox_receive_sequence_unique"
+      ON "inbox" ("received_at")
+    `.execute(db);
+
+    await expect(initSchema(db)).rejects.toThrow(
+      'Inbox index "inbox_receive_sequence_unique" has an invalid definition',
+    );
   });
 
   it("removes the legacy expense uniqueness constraint", async () => {

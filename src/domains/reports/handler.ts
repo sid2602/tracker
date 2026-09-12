@@ -1,5 +1,6 @@
 import { TIME_ZONE } from "../../constants.js";
 import { getReferenceDate } from "../../lib/dates.js";
+import { containsPromptInjectionMarker } from "../../llm/prompt-data.js";
 import type { QueryCreator } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../worker/types.js";
@@ -11,14 +12,25 @@ import {
 } from "./format.js";
 import { queryByCategory, queryExpenseList, queryTotals } from "./queries.js";
 import { parseReport } from "./parser.js";
-import type { ReportParams } from "./schema.js";
+import { reportParamsSchema, type ReportParams } from "./schema.js";
+import { isUserInputError, UserInputError } from "../../worker/errors.js";
 
 export async function handleReport(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  const params = await analyzeReport(deps, context);
-  return persistReport(deps.db, params);
+  try {
+    const params = await analyzeReport(deps, context);
+    return await persistReport(deps.db, context.rawText, params);
+  } catch (error: unknown) {
+    if (isUserInputError(error)) {
+      return {
+        kind: "success",
+        message: error.userMessage,
+      };
+    }
+    throw error;
+  }
 }
 
 export async function analyzeReport(
@@ -31,34 +43,54 @@ export async function analyzeReport(
 
 export async function persistReport(
   db: QueryCreator<AppDatabase>,
+  rawText: string,
   params: ReportParams,
 ): Promise<HandlerResult> {
-  const range = { start: params.start_date, end: params.end_date };
+  if (containsPromptInjectionMarker(rawText)) {
+    throw new UserInputError(
+      "Please send the report request without embedded instructions.",
+    );
+  }
 
-  if (params.group_by === "list") {
+  const safeParams = validateReportParams(params);
+  const range = { start: safeParams.start_date, end: safeParams.end_date };
+
+  if (safeParams.group_by === "list") {
     const { items, totalCount } = await queryExpenseList(
       db,
       range,
-      params.categories,
+      safeParams.categories,
       EXPENSE_LIST_LIMIT,
     );
     return {
       kind: "success",
-      message: formatExpenseList(params.title, items, totalCount),
+      message: formatExpenseList(safeParams.title, items, totalCount),
     };
   }
 
-  if (params.group_by === "category") {
-    const rows = await queryByCategory(db, range, params.categories);
+  if (safeParams.group_by === "category") {
+    const rows = await queryByCategory(db, range, safeParams.categories);
     return {
       kind: "success",
-      message: formatCategoryReport(params.title, rows),
+      message: formatCategoryReport(safeParams.title, rows),
     };
   }
 
-  const rows = await queryTotals(db, range, params.categories);
+  const rows = await queryTotals(db, range, safeParams.categories);
   return {
     kind: "success",
-    message: formatTotalReport(params.title, rows),
+    message: formatTotalReport(safeParams.title, rows),
   };
+}
+
+function validateReportParams(params: ReportParams): ReportParams {
+  const result = reportParamsSchema.safeParse(params);
+  if (!result.success) {
+    throw new UserInputError(
+      "The report parameters were invalid. Please try again.",
+      result.error,
+    );
+  }
+
+  return result.data;
 }

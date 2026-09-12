@@ -4,7 +4,8 @@ Date: 2026-09-03
 
 ## Status
 
-Accepted
+Superseded by [ADR 0006](0006-switch-to-raw-signal-cli.md) for the Signal
+transport details. The single-worker-process decision remains active.
 
 ## Context
 
@@ -12,10 +13,14 @@ The application needs to receive messages from a Signal account and process them
 
 ## Decision
 
-We will use a single Node.js background worker process written in TypeScript. 
-- It connects to a local `signal-cli-rest-api` container via WebSockets (`ws://.../v1/receive/{number}`) running in `MODE=json-rpc`.
+We will use a single Node.js background worker process written in TypeScript.
+- The original wrapper-based WebSocket/REST transport was superseded by ADR
+  0006. The current worker connects directly to the local `signal-cli` daemon
+  over raw TCP JSON-RPC.
 - It does not expose any HTTP server (no Express, no Fastify).
-- It handles the entire pipeline: listening to WebSocket events, routing via LLM, validating data, saving to the database, and sending responses back via Signal REST API.
+- It handles the entire pipeline: receiving JSON-RPC events, routing via LLM,
+  validating data, saving to the database, and sending JSON-RPC responses back
+  via Signal.
 
 ## Consequences
 

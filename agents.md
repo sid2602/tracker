@@ -7,7 +7,7 @@ Always adhere to these rules when modifying or proposing code. Do not suggest al
 
 1. **Stack & Environment:**
    - **Language:** TypeScript running on Node.js (via `tsx`).
-   - **No HTTP Frameworks:** This is a background worker process connecting to `signal-cli-rest-api` via WebSockets (`MODE=json-rpc`). Do not add Express, Fastify, or any HTTP servers.
+   - **No HTTP Frameworks:** This is a background worker process connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC (`--tcp`, JSON-RPC 2.0). Do not add Express, Fastify, WebSocket wrappers, or any HTTP servers.
    - **Environment:** The app runs on a Raspberry Pi using Docker Compose. Keep memory and CPU footprint minimal.
 
 2. **Database:**
@@ -37,7 +37,7 @@ Always adhere to these rules when modifying or proposing code. Do not suggest al
 
 ## Anti-Patterns (What NOT to do)
 To prevent common AI hallucinations and bad habits, **NEVER** do the following in this project:
-- **No HTTP Servers:** Do NOT install or suggest `express`, `fastify`, `hono`, or any HTTP server. The app is strictly a WebSocket client/worker.
+- **No HTTP Servers:** Do NOT install or suggest `express`, `fastify`, `hono`, WebSocket wrappers, or any HTTP server. The app is strictly a raw TCP JSON-RPC client/worker.
 - **No Heavy ORMs:** Do NOT suggest or use `Prisma`, `TypeORM`, or `Drizzle`. Stick exclusively to `kysely` + `better-sqlite3`.
 - **No Floats for Money:** Do NOT use `FLOAT`, `REAL`, or `DECIMAL` for financial amounts. Always use `INTEGER` (cents/groszy).
 - **No LangChain:** Do NOT use `langchain`, `langgraph`, or native `@ai-sdk/openai` packages. All LLM calls must go through Vercel AI SDK Gateway.

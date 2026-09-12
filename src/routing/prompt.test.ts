@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getRouterPrompt,
 } from "./prompt.js";
+import { ROUTING_CARDS } from "./registry.js";
 import {
   MAX_ROUTER_PROMPT_CHARACTERS,
   MAX_ROUTER_USER_MESSAGE_CHARACTERS,
@@ -9,6 +10,7 @@ import {
   type ActionableIntent,
   type RoutingCard,
 } from "./routing-types.js";
+import { UserInputError } from "../worker/errors.js";
 
 function createCard(
   intent: ActionableIntent,
@@ -71,7 +73,7 @@ describe("getRouterPrompt", () => {
     }
 
     expect(prompt).toContain("DECISION PROCEDURE");
-    expect(prompt).toContain("[escaped end marker]");
+    expect(prompt).toContain("[escaped END USER MESSAGE JSON]");
     expect(countOccurrences(prompt, "--- END USER MESSAGE JSON ---")).toBe(1);
   });
 
@@ -117,10 +119,17 @@ describe("getRouterPrompt", () => {
   it("rejects an oversized user message without truncating it", () => {
     const text = "x".repeat(MAX_ROUTER_USER_MESSAGE_CHARACTERS + 1);
 
+    expect(() => getRouterPrompt(text, [])).toThrow(UserInputError);
     expect(() => getRouterPrompt(text, [])).toThrow(
       new RegExp(
         `user message exceeds ${MAX_ROUTER_USER_MESSAGE_CHARACTERS} characters`,
       ),
     );
+  });
+
+  it("maps full-prompt overflow caused by raw input to user input", () => {
+    expect(() =>
+      getRouterPrompt("x".repeat(5970), ROUTING_CARDS),
+    ).toThrow(UserInputError);
   });
 });

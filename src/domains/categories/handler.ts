@@ -5,13 +5,28 @@ import { parseCategoryAction } from "./parser.js";
 import type { CategoryAction } from "./schema.js";
 import { addCategory, getAllCategories, removeCategory } from "./repository.js";
 import { logger } from "../../lib/logger.js";
+import { isUserInputError, UserInputError } from "../../worker/errors.js";
+import { categoryActionSchema } from "./schema.js";
+import { validateCategoryAction } from "./validation.js";
 
 export async function handleCategory(
   deps: AppDeps,
   context: MessageContext,
 ): Promise<HandlerResult> {
-  const parsed = await analyzeCategory(deps, context);
-  return persistCategory(deps.db, parsed);
+  try {
+    const parsed = await analyzeCategory(deps, context);
+    return await deps.db.transaction().execute((trx) =>
+      persistCategory(trx, context.rawText, parsed),
+    );
+  } catch (error: unknown) {
+    if (isUserInputError(error)) {
+      return {
+        kind: "success",
+        message: error.userMessage,
+      };
+    }
+    throw error;
+  }
 }
 
 export async function analyzeCategory(
@@ -23,13 +38,20 @@ export async function analyzeCategory(
 
 export async function persistCategory(
   db: QueryCreator<AppDatabase>,
+  rawText: string,
   parsed: CategoryAction,
 ): Promise<HandlerResult> {
-  logger.info({ parsed }, "category action parsed");
+  const validatedParsed = validateCategorySchema(parsed);
+  const categories = await getAllCategories(db);
+  const safeParsed = validateCategoryAction(
+    rawText,
+    validatedParsed,
+    categories,
+  );
+  logger.info({ parsed: safeParsed }, "category action parsed");
 
-  switch (parsed.action) {
+  switch (safeParsed.action) {
     case "list": {
-      const categories = await getAllCategories(db);
       const formatted = categories
         .map((category) =>
           category.description
@@ -47,11 +69,13 @@ export async function persistCategory(
     }
 
     case "add": {
-      if (!parsed.categoryName) {
-        return { kind: "failure", message: "No category name provided to add." };
+      if (!safeParsed.categoryName) {
+        throw new UserInputError(
+          "Please provide a category name to add.",
+        );
       }
-      const name = parsed.categoryName.trim().toLowerCase();
-      const inserted = await addCategory(db, name, parsed.description);
+      const name = safeParsed.categoryName.trim().toLowerCase();
+      const inserted = await addCategory(db, name, safeParsed.description);
       if (inserted) {
         return { kind: "success", message: `Category added: ${name}` };
       }
@@ -59,10 +83,12 @@ export async function persistCategory(
     }
 
     case "remove": {
-      if (!parsed.categoryName) {
-        return { kind: "failure", message: "No category name provided to remove." };
+      if (!safeParsed.categoryName) {
+        throw new UserInputError(
+          "Please provide a category name to remove.",
+        );
       }
-      const name = parsed.categoryName.trim().toLowerCase();
+      const name = safeParsed.categoryName.trim().toLowerCase();
       const removed = await removeCategory(db, name);
       if (removed) {
         return { kind: "success", message: `Category removed: ${name}` };
@@ -70,4 +96,16 @@ export async function persistCategory(
       return { kind: "success", message: `Category '${name}' does not exist.` };
     }
   }
+}
+
+function validateCategorySchema(parsed: CategoryAction): CategoryAction {
+  const result = categoryActionSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new UserInputError(
+      "Please provide one clear category action and a valid category name.",
+      result.error,
+    );
+  }
+
+  return result.data;
 }

@@ -1,6 +1,6 @@
 # Signal Expense Tracker
 
-A background worker process connecting to `signal-cli-rest-api` via WebSockets to categorize and track expenses via a Signal conversation. Built with TypeScript, Node.js, and Vercel AI SDK.
+A background worker process connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC to categorize and track expenses via a Signal conversation. Built with TypeScript, Node.js, and Vercel AI SDK.
 
 ## Commands
 
@@ -25,6 +25,15 @@ To run evaluation tests for a specific domain to save tokens (e.g. `modification
 RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/domains/modifications/parser.eval.test.ts
 ```
 
+The worker reads `SIGNAL_RPC_HOST` and `SIGNAL_RPC_PORT` and connects to the
+`signal-cli daemon --tcp` endpoint. `docker compose` overrides these values to
+`signal-cli:6001` inside the Compose network. There is no HTTP or WebSocket
+endpoint between the worker and Signal.
+
+The default Compose image is the 64-bit `signal-cli-native` image. For an older
+or 32-bit Raspberry Pi installation, set `SIGNAL_CLI_IMAGE` in `.env` to the
+tested compatible fallback shown in `.env.example`.
+
 ## Deployment (Moving to a new device)
 
 When migrating the project to a new device (like a Raspberry Pi), ensure you copy the entire project directory, paying special attention to the secrets and configuration files:
@@ -37,7 +46,7 @@ To start the system on the new device:
 ```bash
 docker compose up -d
 ```
-(This will automatically start the Signal client, the Node.js worker, the Ofelia scheduler, and the Rclone backup service).
+(This will automatically start the `signal-cli` daemon, the Node.js worker, the Ofelia scheduler, and the Rclone backup service).
 
 ### Clearing Pending Messages (Flushing the Queue)
 

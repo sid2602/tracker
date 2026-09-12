@@ -67,4 +67,32 @@ describe("expenses schema", () => {
 
     expect(result.items[0]?.currency).toBeNull();
   });
+
+  it("rejects invalid calendar dates and oversized item lists", () => {
+    expect(() =>
+      expenseResultSchema.parse({
+        items: [
+          {
+            amountCents: 1500,
+            currency: "PLN",
+            category: "food",
+            occurredOn: "2026-02-30",
+            note: "zakupy",
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      expenseResultSchema.parse({
+        items: Array.from({ length: 21 }, () => ({
+          amountCents: 1500,
+          currency: "PLN",
+          category: "food",
+          occurredOn: "2026-09-01",
+          note: "zakupy",
+        })),
+      }),
+    ).toThrow();
+  });
 });
