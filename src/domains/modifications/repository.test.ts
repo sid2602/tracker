@@ -1,10 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Kysely } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import { createTestDatabase } from "../../test/fixtures.js";
 import {
   findMatchingExpenses,
   deleteExpense,
@@ -14,15 +11,10 @@ import {
 const TEST_SOURCE_AUTHOR = "+48000000000";
 
 describe("modifications repository", () => {
-  let tempDir: string;
-  let dbPath: string;
   let db: Kysely<AppDatabase>;
 
   beforeEach(async () => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-mod-repo-test-"));
-    dbPath = join(tempDir, "expenses.db");
-    db = openDatabase(dbPath);
-    await initSchema(db);
+    db = await createTestDatabase();
 
     await db.insertInto("expenses").values([
       {
@@ -54,7 +46,6 @@ describe("modifications repository", () => {
 
   afterEach(async () => {
     await db.destroy();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("findMatchingExpenses returns the last expense", async () => {

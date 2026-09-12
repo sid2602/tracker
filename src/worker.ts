@@ -8,6 +8,7 @@ import {
 } from "./tracing.js";
 import type { AppDeps } from "./worker/types.js";
 import { runInboxProcessor, saveToInbox } from "./worker/inbox.js";
+import { runInboxRetention } from "./worker/inbox/retention.js";
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -41,12 +42,12 @@ async function main(): Promise<void> {
   process.once("SIGTERM", onShutdown);
 
   const inboxTask = runInboxProcessor(deps, abortController.signal);
+  const retentionTask = runInboxRetention(deps, abortController.signal);
   const listenerTask = listenForMessages(config, async (payload) => {
     await saveToInbox(deps, payload);
   }, { signal: abortController.signal });
 
-  await inboxTask;
-  await listenerTask;
+  await Promise.all([inboxTask, retentionTask, listenerTask]);
 
   await shutdownTracing();
   await deps.db.destroy();

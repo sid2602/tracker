@@ -1,26 +1,15 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import {
+  createTestConfig,
+  createTestDatabase,
+  createTestDeps,
+} from "../../test/fixtures.js";
 import type { AppDeps } from "../../worker/types.js";
 import { handleCategory } from "./handler.js";
 import type { CategoryAction } from "./schema.js";
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: "./data/expenses.db",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
+const config = createTestConfig();
 
 const parseCategoryActionMock = vi.fn<
   (config: Config, text: string) => Promise<CategoryAction>
@@ -38,16 +27,11 @@ vi.mock("../../lib/logger.js", () => ({
 }));
 
 describe("handleCategory", () => {
-  let tempDir: string;
-  let dbPath: string;
   let deps: AppDeps;
 
   beforeEach(async () => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-cat-test-"));
-    dbPath = join(tempDir, "expenses.db");
-    const db = openDatabase(dbPath);
-    await initSchema(db);
-    deps = { db, config };
+    const db = await createTestDatabase();
+    deps = createTestDeps(db, { config });
     parseCategoryActionMock.mockReset();
     
     // remove default categories for consistent testing
@@ -57,7 +41,6 @@ describe("handleCategory", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await deps.db.destroy();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("lists empty categories", async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routerLlmSchema, toRouterResult } from "./schema.js";
+import { routerLlmSchema } from "./schema.js";
 
 describe("routing schema", () => {
   it("accepts a flat LLM object schema", () => {
@@ -36,27 +36,4 @@ describe("routing schema", () => {
     ).toThrow();
   });
 
-  it("normalizes LLM output into RouterResult", () => {
-    expect(
-      toRouterResult({
-        intent: "expense",
-      }),
-    ).toEqual({ intent: "expense" });
-
-    expect(
-      toRouterResult({
-        intent: "report",
-      }),
-    ).toEqual({
-      intent: "report",
-    });
-
-    expect(
-      toRouterResult({
-        intent: "category",
-      }),
-    ).toEqual({
-      intent: "category",
-    });
-  });
 });

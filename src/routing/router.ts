@@ -2,11 +2,7 @@ import type { Config } from "../config.js";
 import { generateStructured } from "../llm/generate.js";
 import { getRouterPrompt } from "./prompt.js";
 import { ROUTING_CARDS } from "./registry.js";
-import {
-  routerLlmSchema,
-  toRouterResult,
-  type RouterResult,
-} from "./schema.js";
+import { routerLlmSchema, type RouterResult } from "./schema.js";
 
 export async function routeMessage(
   config: Config,
@@ -19,5 +15,5 @@ export async function routeMessage(
     "llm.router",
   );
 
-  return toRouterResult(raw);
+  return raw;
 }

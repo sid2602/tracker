@@ -1,1 +1,5 @@
-export { handleCategory } from "./handler.js";
+export {
+  analyzeCategory,
+  handleCategory,
+  persistCategory,
+} from "./handler.js";

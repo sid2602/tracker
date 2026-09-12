@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "../../config.js";
+import { createTestConfig } from "../../test/fixtures.js";
 import { parseCategoryAction } from "./parser.js";
 
 const generateObjectMock = vi.fn();
@@ -12,19 +12,7 @@ vi.mock("../../llm/provider.js", () => ({
   getModel: vi.fn(() => "mock-model"),
 }));
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: "./data/expenses.db",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
+const config = createTestConfig();
 
 describe("parseCategoryAction", () => {
   beforeEach(() => {

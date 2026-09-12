@@ -1,9 +1,6 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Kysely } from "kysely";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import { createTestDatabase } from "../../test/fixtures.js";
 import type { AppDatabase } from "../../db/schema.js";
 import {
   insertExpenses,
@@ -32,18 +29,14 @@ function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
 }
 
 describe("queryExpenseList", () => {
-  let tempDir: string;
   let db: Kysely<AppDatabase>;
 
   beforeEach(async () => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-report-query-"));
-    db = openDatabase(join(tempDir, "expenses.db"));
-    await initSchema(db);
+    db = await createTestDatabase();
   });
 
   afterEach(async () => {
     await db.destroy();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("returns expenses in date range ordered by occurred_on then id", async () => {

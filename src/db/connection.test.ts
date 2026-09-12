@@ -78,6 +78,33 @@ describe("database migrations", () => {
     await assertRequiredIndexes();
   });
 
+  it("does not reseed an existing empty categories table", async () => {
+    db = openDatabase(":memory:");
+    await db.schema
+      .createTable("categories")
+      .addColumn("name", "text", (column) => column.primaryKey())
+      .addColumn("created_at", "text", (column) => column.notNull())
+      .execute();
+
+    await initSchema(db);
+
+    await expect(
+      db.selectFrom("categories").selectAll().execute(),
+    ).resolves.toEqual([]);
+  });
+
+  it("keeps an intentionally emptied category table empty after reinitialization", async () => {
+    db = openDatabase(":memory:");
+    await initSchema(db);
+    await db.deleteFrom("categories").execute();
+
+    await initSchema(db);
+
+    await expect(
+      db.selectFrom("categories").selectAll().execute(),
+    ).resolves.toEqual([]);
+  });
+
   it("backfills receive sequences deterministically and reruns idempotently", async () => {
     db = openDatabase(":memory:");
 

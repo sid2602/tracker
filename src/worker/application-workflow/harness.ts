@@ -2,8 +2,8 @@ import { expect, vi } from "vitest";
 import { z } from "zod";
 import type { Kysely } from "kysely";
 import type { Config } from "../../config.js";
-import { initSchema, openDatabase } from "../../db/connection.js";
 import type { AppDatabase, InboxTable } from "../../db/schema.js";
+import { createTestConfig, createTestDatabase } from "../../test/fixtures.js";
 import type { AppDeps } from "../types.js";
 
 type GenerateStructured = typeof import("../../llm/generate.js").generateStructured;
@@ -99,19 +99,10 @@ generateStructuredMock.mockImplementation(
   },
 );
 
-const baseConfig: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: ":memory:",
-  signalRpcHost: "signal-cli-not-used",
-  signalRpcPort: 6001,
+const baseConfig = createTestConfig({
   signalPhoneNumber: TEST_PHONE_NUMBER,
   signalAllowedInputDeviceIds: [TEST_DEVICE_ID],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
+});
 
 let inboxModulePromise: Promise<typeof import("../inbox.js")> | undefined;
 let activeHarness = false;
@@ -157,12 +148,11 @@ export async function createWorkflowHarness(): Promise<WorkflowHarness> {
   }
   activeHarness = true;
 
-  const db = openDatabase(":memory:");
+  let db: Kysely<AppDatabase>;
   try {
-    await initSchema(db);
+    db = await createTestDatabase();
   } catch (error: unknown) {
     activeHarness = false;
-    await db.destroy();
     throw error;
   }
 

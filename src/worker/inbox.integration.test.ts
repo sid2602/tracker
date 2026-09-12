@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "kysely";
-import { initSchema, openDatabase } from "../db/connection.js";
+import { createTestDatabase } from "../test/fixtures.js";
 import type { Kysely } from "kysely";
 import type { AppDatabase } from "../db/schema.js";
 import type { Config } from "../config.js";
+import { createTestConfig, createTestDeps } from "../test/fixtures.js";
 import type { AppDeps } from "./types.js";
 import { saveToInbox, processNextInboxItem } from "./inbox.js";
 import type { ModificationResult } from "../domains/modifications/schema.js";
@@ -62,19 +63,7 @@ describe("inbox integration", () => {
   let db: Kysely<AppDatabase>;
   let deps: AppDeps;
 
-  const config: Config = {
-    aiGatewayApiKey: "test-gateway-key",
-    llmProvider: "openai",
-    llmModel: "gpt-4o-mini",
-    databasePath: ":memory:",
-    signalRpcHost: "signal-cli-rest-api",
-    signalRpcPort: 6001,
-    signalPhoneNumber: "+15005550100",
-    signalAllowedInputDeviceIds: [1],
-    langfusePublicKey: null,
-    langfuseSecretKey: null,
-    langfuseBaseUrl: "https://cloud.langfuse.com",
-  };
+  const config = createTestConfig();
 
   const payload = {
     envelope: {
@@ -89,9 +78,11 @@ describe("inbox integration", () => {
 
   beforeEach(async () => {
     vi.resetAllMocks();
-    db = openDatabase(":memory:");
-    await initSchema(db);
-    deps = { db, config, now: () => new Date(1_000_000) };
+    db = await createTestDatabase();
+    deps = createTestDeps(db, {
+      config,
+      now: () => new Date(1_000_000),
+    });
     routeMessageMock.mockResolvedValue({ intent: "expense" });
     parseExpensesMock.mockResolvedValue({
       items: [

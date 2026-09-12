@@ -16,7 +16,7 @@ const REFERENCE_DATE = "2026-09-04";
 // Helper to partially match items
 function expectItemsToMatch(
   actual: ExpenseItem[],
-  expected: Record<string, any>[],
+  expected: Record<string, unknown>[],
 ) {
   expect(actual).toHaveLength(expected.length);
   for (let i = 0; i < expected.length; i++) {

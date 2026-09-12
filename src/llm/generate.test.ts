@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NoObjectGeneratedError, TypeValidationError } from "ai";
 import { z } from "zod";
-import type { Config } from "../config.js";
+import { createTestConfig } from "../test/fixtures.js";
 import { generateStructured, withAbortTimeout } from "./generate.js";
 
 const generateObjectMock = vi.fn();
@@ -18,19 +18,7 @@ vi.mock("./provider.js", () => ({
   getModel: vi.fn(() => "mock-model"),
 }));
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: ":memory:",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
+const config = createTestConfig();
 
 describe("generateStructured", () => {
   beforeEach(() => {

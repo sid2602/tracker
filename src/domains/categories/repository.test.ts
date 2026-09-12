@@ -1,8 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import { createTestDatabase } from "../../test/fixtures.js";
 import {
   addCategory,
   categoryExists,
@@ -13,15 +10,10 @@ import type { Kysely } from "kysely";
 import type { AppDatabase } from "../../db/schema.js";
 
 describe("categories repository", () => {
-  let tempDir: string;
-  let dbPath: string;
   let db: Kysely<AppDatabase>;
 
   beforeEach(async () => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-db-test-"));
-    dbPath = join(tempDir, "expenses.db");
-    db = openDatabase(dbPath);
-    await initSchema(db);
+    db = await createTestDatabase();
     
     // clear default categories for clean tests
     await db.deleteFrom("categories").execute();
@@ -29,7 +21,6 @@ describe("categories repository", () => {
 
   afterEach(async () => {
     await db.destroy();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("adds category and retrieves it", async () => {

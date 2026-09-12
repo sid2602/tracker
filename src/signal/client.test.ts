@@ -1,6 +1,6 @@
 import * as net from "node:net";
 import { describe, expect, it } from "vitest";
-import type { Config } from "../config.js";
+import { createTestConfig } from "../test/fixtures.js";
 import { buildSendPayload, listenForMessages } from "./client.js";
 
 describe("Signal send payload", () => {
@@ -112,20 +112,13 @@ describe("Signal receive lifecycle", () => {
   });
 });
 
-function testConfig(port: number): Config {
-  return {
+function testConfig(port: number) {
+  return createTestConfig({
     aiGatewayApiKey: "test",
-    llmProvider: "openai",
-    llmModel: "test",
-    databasePath: ":memory:",
     signalRpcHost: "127.0.0.1",
     signalRpcPort: port,
-    signalPhoneNumber: "+15005550100",
-    signalAllowedInputDeviceIds: [1],
-    langfusePublicKey: null,
-    langfuseSecretKey: null,
     langfuseBaseUrl: "https://example.test",
-  };
+  });
 }
 
 async function createServer(): Promise<net.Server> {

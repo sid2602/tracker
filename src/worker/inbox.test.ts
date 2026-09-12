@@ -1,7 +1,7 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sql } from "kysely";
 import { saveToInbox, processNextInboxItem } from "./inbox.js";
-import { openDatabase, initSchema } from "../db/connection.js";
+import { createTestDatabase, createTestDeps } from "../test/fixtures.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
 import type { Kysely } from "kysely";
 import type { AppDatabase } from "../db/schema.js";
@@ -64,26 +64,15 @@ describe("inbox", () => {
     vi.resetAllMocks();
     mockNowMs = 1_000_000;
 
-    db = openDatabase(":memory:");
-    await initSchema(db);
+    db = await createTestDatabase();
 
-    deps = {
-      db,
-      config: {
-        signalRpcHost: "signal-cli-rest-api",
-        signalRpcPort: 6001,
-        signalPhoneNumber: "+15005550100",
-        signalAllowedInputDeviceIds: [1],
-        llmProvider: "openai",
-        llmModel: "gpt",
-        databasePath: ":memory:",
-        langfusePublicKey: null,
-        langfuseSecretKey: null,
-        langfuseBaseUrl: "",
-        aiGatewayApiKey: "",
-      },
+    deps = createTestDeps(db, {
       now: () => new Date(mockNowMs),
-    };
+    });
+  });
+
+  afterEach(async () => {
+    await db.destroy();
   });
 
   const validPayload = {

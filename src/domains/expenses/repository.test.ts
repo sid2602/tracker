@@ -1,8 +1,7 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import { createTestDatabase } from "../../test/fixtures.js";
+import type { Kysely } from "kysely";
+import type { AppDatabase } from "../../db/schema.js";
 import {
   countExpenses,
   getExpenseByKey,
@@ -31,22 +30,17 @@ function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
 }
 
 describe("expenses repository", () => {
-  let tempDir: string;
-  let dbPath: string;
+  let db: Kysely<AppDatabase>;
 
-  beforeEach(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-db-test-"));
-    dbPath = join(tempDir, "expenses.db");
+  beforeEach(async () => {
+    db = await createTestDatabase();
   });
 
-  afterEach(() => {
-    rmSync(tempDir, { recursive: true, force: true });
+  afterEach(async () => {
+    await db.destroy();
   });
 
   it("inserts expense", async () => {
-    const db = openDatabase(dbPath);
-    await initSchema(db);
-
     const expense = createExpense();
     const result = await insertExpenses(db, [expense]);
 
@@ -61,13 +55,9 @@ describe("expenses repository", () => {
     );
 
     expect(stored?.amount_cents).toBe(1500);
-    await db.destroy();
   });
 
   it("ignores duplicate message", async () => {
-    const db = openDatabase(dbPath);
-    await initSchema(db);
-
     const expense = createExpense();
     const first = await insertExpenses(db, [expense]);
     const second = await insertExpenses(db, [expense]);
@@ -75,13 +65,9 @@ describe("expenses repository", () => {
     expect(first.inserted).toBe(1);
     expect(second.inserted).toBe(0);
     expect(await countExpenses(db)).toBe(1);
-    await db.destroy();
   });
 
   it("inserts multiple items in one transaction", async () => {
-    const db = openDatabase(dbPath);
-    await initSchema(db);
-
     const expenses = [
       createExpense({ itemIndex: 0, amountCents: 1000, note: "chleb" }),
       createExpense({ itemIndex: 1, amountCents: 500, note: "mleko" }),
@@ -91,13 +77,9 @@ describe("expenses repository", () => {
 
     expect(result.inserted).toBe(2);
     expect(await countExpenses(db)).toBe(2);
-    await db.destroy();
   });
 
   it("enforces idempotency by source message key and item index", async () => {
-    const db = openDatabase(dbPath);
-    await initSchema(db);
-
     const first = createExpense({
       sourceMessageKey: "same-message",
       sourceTimestamp: 100,
@@ -113,6 +95,5 @@ describe("expenses repository", () => {
     expect((await insertExpenses(db, [first])).inserted).toBe(1);
     expect((await insertExpenses(db, [second])).inserted).toBe(0);
     expect(await countExpenses(db)).toBe(1);
-    await db.destroy();
   });
 });

@@ -1,39 +1,33 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "../config.js";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { createTestDeps, openTestDatabase } from "../test/fixtures.js";
 import { dispatchMessage } from "./dispatch.js";
-import type { AppDeps } from "./types.js";
 
 const handleExpenseMock = vi.fn();
 const handleReportMock = vi.fn();
 
 vi.mock("../domains/expenses/index.js", () => ({
   handleExpense: (...args: unknown[]) => handleExpenseMock(...args),
+  analyzeExpense: vi.fn(),
+  persistExpense: vi.fn(),
 }));
 
 vi.mock("../domains/reports/index.js", () => ({
   handleReport: (...args: unknown[]) => handleReportMock(...args),
+  analyzeReport: vi.fn(),
+  persistReport: vi.fn(),
 }));
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: "./data/expenses.db",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
-
-const deps = { db: {}, config } as AppDeps;
+const testDb = openTestDatabase();
+const deps = createTestDeps(testDb);
 const context = {
   messageKey: "test-key", sourceAuthor: "+48000000000",
   sourceTimestamp: 1,
   rawText: "test",
 };
+
+afterAll(async () => {
+  await testDb.destroy();
+});
 
 describe("dispatchMessage", () => {
   beforeEach(() => {

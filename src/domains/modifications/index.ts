@@ -1,1 +1,5 @@
-export { handleModification } from "./handler.js";
+export {
+  analyzeModification,
+  handleModification,
+  persistModification,
+} from "./handler.js";

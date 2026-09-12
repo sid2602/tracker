@@ -33,13 +33,14 @@ sequenceDiagram
 
 1. **Single Node.js Process:** No Express, Fastify, or additional web servers. A single `worker.ts` process owns the raw TCP JSON-RPC connection and its bounded receive dispatcher.
 2. **Two-Step LLM Routing:** 
-   - Step 1: Global Router identifies the intent (`expense`, `report`, `ignore`) using a small, strict Zod schema.
-   - Step 2: Domain handlers execute secondary, detailed LLM prompts for specific tasks.
+   - Step 1: Global Router identifies one intent (`expense`, `report`, `category`, `modification`, or `ignore`) using a small, strict Zod schema.
+   - Step 2: The selected domain handler executes a secondary, detailed LLM prompt for the specific task.
 3. **Database (SQLite):** 
    - Uses `better-sqlite3` and `kysely`.
    - Financial amounts are stored strictly as `INTEGER` representing cents/groszy.
    - Requires transactions for data integrity.
-4. **Vercel AI Gateway:** All LLM calls route through Vercel AI Gateway to easily swap providers (OpenAI/Anthropic) without changing application logic.
+4. **Durable Inbox:** Signal payloads are persisted before processing and move through `pending -> analyzed -> saved -> confirmed`, with retry and delivery recovery. Terminal rows are retained for 90 days.
+5. **Vercel AI Gateway:** All LLM calls route through Vercel AI Gateway to easily swap providers (OpenAI/Anthropic) without changing application logic.
 
 ## Directory Structure Map
 
@@ -48,7 +49,9 @@ src/
 ├── config.ts           # Environment variables validation and setup
 ├── worker.ts           # Main entry point, sets up TCP JSON-RPC and graceful shutdown
 ├── worker/
-│   └── dispatch.ts     # Core message routing logic
+│   ├── inbox.ts        # Stable inbox facade for ingest, processing, and polling
+│   ├── inbox/          # Inbox storage, policy, legacy handling, delivery, and runner
+│   └── dispatch.ts     # Core message routing and domain phase coordination
 ├── signal/
 │   ├── client.ts       # Raw TCP JSON-RPC client and bounded receive lifecycle
 │   ├── receive-queue.ts # Bounded Buffer framer and FIFO receive dispatcher
@@ -59,9 +62,14 @@ src/
 ├── routing/            # Global Router (Step 1)
 ├── domains/
 │   ├── expenses/       # Expense parsing, schema, and DB repository
-│   └── reports/        # Report generation, date boundaries, and DB queries
+│   ├── reports/        # Report generation, date boundaries, and DB queries
+│   ├── categories/     # Category catalog management
+│   └── modifications/  # Existing expense updates and deletion
 ├── db/
-│   ├── connection.ts   # Kysely & better-sqlite3 instantiation
+│   ├── connection.ts   # Kysely & better-sqlite3 facade and schema orchestration
+│   ├── bootstrap.ts    # Base tables and indexes
+│   ├── migrations.ts   # Existing schema migrations and rebuilds
+│   ├── seeds.ts        # Default category seed
 │   └── schema.ts       # Main database schema definitions
 ├── tracing.ts          # Optional Langfuse telemetry
 └── lib/                # Shared utilities

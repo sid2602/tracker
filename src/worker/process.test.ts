@@ -1,8 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Config } from "../config.js";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
+import { createTestDeps, openTestDatabase } from "../test/fixtures.js";
 import { processMessage } from "./dispatch.js";
-import type { AppDeps } from "./types.js";
 
 const routeMessageMock = vi.fn();
 const handleExpenseMock = vi.fn();
@@ -13,10 +20,14 @@ vi.mock("../routing/router.js", () => ({
 
 vi.mock("../domains/expenses/index.js", () => ({
   handleExpense: (...args: unknown[]) => handleExpenseMock(...args),
+  analyzeExpense: vi.fn(),
+  persistExpense: vi.fn(),
 }));
 
 vi.mock("../domains/reports/index.js", () => ({
   handleReport: vi.fn(),
+  analyzeReport: vi.fn(),
+  persistReport: vi.fn(),
 }));
 
 vi.mock("../lib/logger.js", () => ({
@@ -27,35 +38,26 @@ vi.mock("../lib/logger.js", () => ({
   },
 }));
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: "./data/expenses.db",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
-
-const deps = { db: {}, config } as AppDeps;
+const testDb = openTestDatabase();
+const deps = createTestDeps(testDb);
 const context = {
   messageKey: "test-key", sourceAuthor: "+15005550100",
   sourceTimestamp: 1,
   rawText: "groceries 15 pln",
 };
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+afterAll(async () => {
+  await testDb.destroy();
+});
+
 describe("processMessage", () => {
   beforeEach(() => {
     routeMessageMock.mockReset();
     handleExpenseMock.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
   });
 
   it("returns silent for ignore", async () => {

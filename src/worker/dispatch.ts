@@ -1,21 +1,24 @@
-import { handleExpense } from "../domains/expenses/index.js";
 import {
   analyzeExpense,
+  handleExpense,
   persistExpense,
-} from "../domains/expenses/handler.js";
+} from "../domains/expenses/index.js";
 import { logger } from "../lib/logger.js";
 import {
   analyzeReport,
+  handleReport,
   persistReport,
-} from "../domains/reports/handler.js";
-import { handleReport } from "../domains/reports/index.js";
-import { analyzeCategory, persistCategory } from "../domains/categories/handler.js";
-import { handleCategory } from "../domains/categories/index.js";
+} from "../domains/reports/index.js";
 import {
   analyzeModification,
+  handleModification,
   persistModification,
-} from "../domains/modifications/handler.js";
-import { handleModification } from "../domains/modifications/index.js";
+} from "../domains/modifications/index.js";
+import {
+  analyzeCategory,
+  handleCategory,
+  persistCategory,
+} from "../domains/categories/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
 import { routeMessage } from "../routing/router.js";
 import { recordMessageTrace } from "../tracing.js";

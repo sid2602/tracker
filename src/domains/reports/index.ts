@@ -1,1 +1,5 @@
-export { handleReport } from "./handler.js";
+export {
+  analyzeReport,
+  handleReport,
+  persistReport,
+} from "./handler.js";

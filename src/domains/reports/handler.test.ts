@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Config } from "../../config.js";
-import { initSchema, openDatabase } from "../../db/connection.js";
+import {
+  createTestConfig,
+  createTestDatabase,
+  createTestDeps,
+} from "../../test/fixtures.js";
 import {
   insertExpenses,
   type ExpenseInput,
@@ -29,19 +30,7 @@ vi.mock("./parser.js", () => ({
     parseReportMock(configArg, text, currentDateStr),
 }));
 
-const config: Config = {
-  aiGatewayApiKey: "test-gateway-key",
-  llmProvider: "openai",
-  llmModel: "gpt-4o-mini",
-  databasePath: "./data/expenses.db",
-  signalRpcHost: "signal-cli-rest-api",
-  signalRpcPort: 6001,
-  signalPhoneNumber: "+15005550100",
-  signalAllowedInputDeviceIds: [1],
-  langfusePublicKey: null,
-  langfuseSecretKey: null,
-  langfuseBaseUrl: "https://cloud.langfuse.com",
-};
+const config = createTestConfig();
 
 function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
   const sourceTimestamp = overrides.sourceTimestamp ?? 1_700_000_000_000;
@@ -62,20 +51,16 @@ function createExpense(overrides: Partial<ExpenseInput> = {}): ExpenseInput {
 }
 
 describe("handleReport", () => {
-  let tempDir: string;
   let deps: AppDeps;
 
   beforeEach(async () => {
-    tempDir = mkdtempSync(join(tmpdir(), "tracker-report-test-"));
-    const db = openDatabase(join(tempDir, "expenses.db"));
-    await initSchema(db);
-    deps = { db, config, now: () => NOW };
+    const db = await createTestDatabase();
+    deps = createTestDeps(db, { config, now: () => NOW });
     parseReportMock.mockReset();
   });
 
   afterEach(async () => {
     await deps.db.destroy();
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it("returns empty totals", async () => {
