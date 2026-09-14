@@ -8,10 +8,10 @@ import { ROUTING_CARDS } from "./registry.js";
 describe("routing registry", () => {
   it("contains every actionable intent exactly once in priority order", () => {
     expect(ROUTING_CARDS.map((card) => card.intent)).toEqual([
-      "category",
-      "modification",
-      "report",
-      "expense",
+      "expenses.category",
+      "expenses.modification",
+      "expenses.report",
+      "expenses.create",
     ]);
 
     expect(new Set(ROUTING_CARDS.map((card) => card.intent)).size).toBe(

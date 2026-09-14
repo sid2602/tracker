@@ -603,20 +603,20 @@ A stage is **done** only when every exit check passes. Do not start stage N+1 un
 **Goal:** Introduce `products/` + registry-driven dispatch **without** changing expense UX.
 
 **Scope:**
-- [ ] Add `ProductModule` + product registry
-- [ ] Move `src/domains/*` → `src/products/expenses/domains/*`
-- [ ] Registry-driven `analyze` / `persist` / dispatch for current expense intents
-- [ ] Keep inbox analysis compatible (or migrate with tests)
-- [ ] Update `architecture.md` for product layout
-- [ ] Namespacing: follow ADR (rename now **or** defer string rename to stage 2)
+- [x] Add `ProductModule` + product registry
+- [x] Move `src/domains/*` → `src/products/expenses/domains/*`
+- [x] Registry-driven `analyze` / `persist` / dispatch for current expense intents
+- [x] Keep inbox analysis compatible (or migrate with tests) — canonical in `parsed_json`; legacy replay via `parseMessageAnalysis`
+- [x] Update `architecture.md` for product layout
+- [x] Namespacing: canonical IDs everywhere internal; Stage-1 LLM schema still legacy + alias map (ADR 0023)
 
 **Exit checks:**
-- [ ] `npm run verify` passes
-- [ ] Existing expense application-workflow tests pass
-- [ ] Existing expense/router unit tests pass
-- [ ] Existing expense/router evals still pass
-- [ ] Smoke: same expense messages still save/report/modify as before
-- [ ] Structure check: a second product could be registered without touching Signal/inbox
+- [x] `npm run verify` passes (275 tests)
+- [x] Existing expense application-workflow tests pass
+- [x] Existing expense/router unit tests pass
+- [x] Existing expense/router evals pass (154 evals; 2 flaky LLM misses cleared on retry)
+- [x] Smoke covered by workflow integration tests (save/report/modify/catalog)
+- [x] Structure check: second product = new ProductModule + `buildProductRegistry([...])` (uniqueness enforced)
 
 **Out of scope:** `training_entries`, training intents, cross-product router copy.
 

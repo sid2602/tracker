@@ -5,26 +5,26 @@ describe("routing schema", () => {
   it("accepts a flat LLM object schema", () => {
     expect(
       routerLlmSchema.parse({
-        intent: "expense",
+        intent: "expenses.create",
       }),
     ).toEqual({
-      intent: "expense",
+      intent: "expenses.create",
     });
 
     expect(
       routerLlmSchema.parse({
-        intent: "report",
+        intent: "expenses.report",
       }),
     ).toEqual({
-      intent: "report",
+      intent: "expenses.report",
     });
 
     expect(
       routerLlmSchema.parse({
-        intent: "category",
+        intent: "expenses.category",
       }),
     ).toEqual({
-      intent: "category",
+      intent: "expenses.category",
     });
   });
 

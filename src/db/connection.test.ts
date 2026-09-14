@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { initSchema, openDatabase } from "./connection.js";
 import type { AppDatabase } from "./schema.js";
-import { insertExpenses } from "../domains/expenses/repository.js";
+import { insertExpenses } from "../products/expenses/domains/expenses/repository.js";
 
 type IndexRow = {
   name: string;

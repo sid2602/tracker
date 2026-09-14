@@ -21,11 +21,11 @@ describe("routeMessage", () => {
 
   it("accepts valid response", async () => {
     generateObjectMock.mockResolvedValue({
-      object: { intent: "expense" },
+      object: { intent: "expenses.create" },
     });
 
     await expect(routeMessage(config, "zakupy 15 zl")).resolves.toEqual({
-      intent: "expense",
+      intent: "expenses.create",
     });
   });
 
@@ -46,24 +46,24 @@ describe("routeMessage", () => {
   it("normalizes report fields", async () => {
     generateObjectMock.mockResolvedValue({
       object: {
-        intent: "report",
+        intent: "expenses.report",
       },
     });
 
     await expect(routeMessage(config, "report this month")).resolves.toEqual({
-      intent: "report",
+      intent: "expenses.report",
     });
   });
 
   it("handles category intent", async () => {
     generateObjectMock.mockResolvedValue({
       object: {
-        intent: "category",
+        intent: "expenses.category",
       },
     });
 
     await expect(routeMessage(config, "dodaj kategorie")).resolves.toEqual({
-      intent: "category",
+      intent: "expenses.category",
     });
   });
 });

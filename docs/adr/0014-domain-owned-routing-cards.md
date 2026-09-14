@@ -2,6 +2,8 @@
 
 Date: 2026-09-11
 
+**Note (2026-09-14):** Expense domain paths moved to `src/products/expenses/domains/<domain>/` (ADR 0023). Routing-card ownership and composition rules in this ADR still apply.
+
 ## Status
 
 Accepted
@@ -21,7 +23,7 @@ At the same time, routing cannot be fully decentralized. The router must resolve
 
 We will use domain-owned routing cards composed by a central router prompt.
 
-1. Each actionable domain (`expense`, `report`, `category`, `modification`) will export one typed, data-only routing card from `src/domains/<domain>/routing.ts`.
+1. Each actionable domain (`expense`, `report`, `category`, `modification`) will export one typed, data-only routing card from `src/products/expenses/domains/<domain>/routing.ts` (originally `src/domains/<domain>/routing.ts`; relocated by ADR 0023).
 2. A routing card will contain only domain-local information:
    - the intent's object and goal;
    - local semantic rules;

@@ -2,6 +2,8 @@
 
 Date: 2026-09-11
 
+**Note (2026-09-14):** Domain prompt files now live under `src/products/expenses/domains/<domain>/prompt.ts` (ADR 0023). Trust-boundary rules unchanged.
+
 ## Status
 
 Accepted

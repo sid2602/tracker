@@ -7,7 +7,7 @@ import type { Config } from "../config.js";
 import { createTestConfig, createTestDeps } from "../test/fixtures.js";
 import type { AppDeps } from "./types.js";
 import { saveToInbox, processNextInboxItem } from "./inbox.js";
-import type { ModificationResult } from "../domains/modifications/schema.js";
+import type { ModificationResult } from "../products/expenses/domains/modifications/schema.js";
 
 const routeMessageMock = vi.fn();
 const parseExpensesMock = vi.fn();
@@ -20,7 +20,7 @@ vi.mock("../routing/router.js", () => ({
   routeMessage: (config: Config, text: string) => routeMessageMock(config, text),
 }));
 
-vi.mock("../domains/expenses/parser.js", () => ({
+vi.mock("../products/expenses/domains/expenses/parser.js", () => ({
   parseExpenses: (
     config: Config,
     text: string,
@@ -29,7 +29,7 @@ vi.mock("../domains/expenses/parser.js", () => ({
   ) => parseExpensesMock(config, text, referenceDate, categories),
 }));
 
-vi.mock("../domains/modifications/parser.js", () => ({
+vi.mock("../products/expenses/domains/modifications/parser.js", () => ({
   parseModification: (
     config: Config,
     text: string,
@@ -83,7 +83,7 @@ describe("inbox integration", () => {
       config,
       now: () => new Date(1_000_000),
     });
-    routeMessageMock.mockResolvedValue({ intent: "expense" });
+    routeMessageMock.mockResolvedValue({ intent: "expenses.create" });
     parseExpensesMock.mockResolvedValue({
       items: [
         {
@@ -145,7 +145,7 @@ describe("inbox integration", () => {
   });
 
   it("rolls back a modification when saving the inbox result fails", async () => {
-    routeMessageMock.mockResolvedValue({ intent: "modification" });
+    routeMessageMock.mockResolvedValue({ intent: "expenses.modification" });
     await db
       .insertInto("expenses")
       .values({
@@ -196,7 +196,7 @@ describe("inbox integration", () => {
   });
 
   it("persists semantic modification feedback without mutating data", async () => {
-    routeMessageMock.mockResolvedValue({ intent: "modification" });
+    routeMessageMock.mockResolvedValue({ intent: "expenses.modification" });
     await db
       .insertInto("expenses")
       .values({

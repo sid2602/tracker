@@ -5,13 +5,13 @@ import { dispatchMessage } from "./dispatch.js";
 const handleExpenseMock = vi.fn();
 const handleReportMock = vi.fn();
 
-vi.mock("../domains/expenses/index.js", () => ({
+vi.mock("../products/expenses/domains/expenses/index.js", () => ({
   handleExpense: (...args: unknown[]) => handleExpenseMock(...args),
   analyzeExpense: vi.fn(),
   persistExpense: vi.fn(),
 }));
 
-vi.mock("../domains/reports/index.js", () => ({
+vi.mock("../products/expenses/domains/reports/index.js", () => ({
   handleReport: (...args: unknown[]) => handleReportMock(...args),
   analyzeReport: vi.fn(),
   persistReport: vi.fn(),
@@ -41,7 +41,7 @@ describe("dispatchMessage", () => {
       message: "Saved 1 item",
     });
 
-    const result = await dispatchMessage(deps, context, { intent: "expense" });
+    const result = await dispatchMessage(deps, context, { intent: "expenses.create" });
 
     expect(handleExpenseMock).toHaveBeenCalledWith(deps, context);
     expect(result).toEqual({
@@ -57,7 +57,7 @@ describe("dispatchMessage", () => {
     });
 
     const route = {
-      intent: "report" as const,
+      intent: "expenses.report" as const,
     };
 
     const result = await dispatchMessage(deps, context, route);

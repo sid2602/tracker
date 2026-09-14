@@ -27,11 +27,11 @@ Always adhere to these rules when modifying or proposing code. Do not suggest al
    - **CRITICAL (Eval Tests)**: Any modifications to AI Prompts or new AI parsers MUST be covered by LLM Evaluation Tests (`*.eval.test.ts`). These tests verify that the model correctly parses a wide range of user messages (in English and Polish).
      - Standard test run (`npm run verify` or `npm run test`) automatically ignores `.eval.test.ts` files to save AI Gateway tokens.
      - To run all Eval tests: `SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npm run test:eval`
-     - To run Eval tests for a specific domain: `RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/domains/modifications/parser.eval.test.ts`
+     - To run Eval tests for a specific domain: `RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/products/expenses/domains/modifications/parser.eval.test.ts`
    - After making code changes, ALWAYS run `npm run verify` to ensure types and tests pass before declaring the task complete.
 
 5. **Code Structure (Domain Pattern):**
-   - Every new feature must be isolated as a separate domain in `src/domains/`.
+   - Every new feature must be isolated as a separate domain under `src/products/<product>/domains/`.
    - Strictly maintain the separation of concerns by creating dedicated files within a domain: `handler.ts`, `schema.ts`, `parser.ts`, `repository.ts`.
    - Do NOT dump all logic into a single massive `index.ts` file.
 

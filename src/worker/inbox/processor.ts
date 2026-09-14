@@ -211,16 +211,5 @@ export async function processNextInboxItem(
 }
 
 function routeForAnalysis(analysis: MessageAnalysis): RouterResult {
-  switch (analysis.intent) {
-    case "expense":
-      return { intent: "expense" };
-    case "report":
-      return { intent: "report" };
-    case "category":
-      return { intent: "category" };
-    case "modification":
-      return { intent: "modification" };
-    case "ignore":
-      return { intent: "ignore" };
-  }
+  return { intent: analysis.intent };
 }

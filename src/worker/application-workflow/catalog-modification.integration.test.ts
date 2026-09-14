@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { CategoryAction } from "../../domains/categories/schema.js";
-import type { ModificationResult } from "../../domains/modifications/schema.js";
+import type { CategoryAction } from "../../products/expenses/domains/categories/schema.js";
+import type { ModificationResult } from "../../products/expenses/domains/modifications/schema.js";
 import {
   createWorkflowHarness,
   FIRST_MESSAGE_TIMESTAMP,
@@ -26,7 +26,7 @@ describe("application workflow: catalog and modifications", () => {
       categoryName: "pets",
       description: null,
     };
-    harness.scriptLlm("llm.router", { intent: "category" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.category" }, [rawText]);
     harness.scriptLlm("llm.category", parsedCategory, [rawText]);
 
     await harness.runWorkflow(rawText, FIRST_MESSAGE_TIMESTAMP + 3);
@@ -47,7 +47,7 @@ describe("application workflow: catalog and modifications", () => {
       action: "list",
       categoryName: null,
     };
-    harness.scriptLlm("llm.router", { intent: "category" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.category" }, [rawText]);
     harness.scriptLlm("llm.category", parsedCategory, [rawText]);
 
     await harness.runWorkflow(rawText, FIRST_MESSAGE_TIMESTAMP + 4);
@@ -85,7 +85,7 @@ describe("application workflow: catalog and modifications", () => {
       categoryName: "pets",
       description: null,
     };
-    harness.scriptLlm("llm.router", { intent: "category" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.category" }, [rawText]);
     harness.scriptLlm("llm.category", parsedCategory, [rawText]);
 
     await harness.runWorkflow(rawText, FIRST_MESSAGE_TIMESTAMP + 5);
@@ -132,7 +132,7 @@ describe("application workflow: catalog and modifications", () => {
       selection: null,
       updatePayload: { amountCents: 2000, category: null },
     };
-    harness.scriptLlm("llm.router", { intent: "modification" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.modification" }, [rawText]);
     harness.scriptLlm("llm.modification", parsedModification, [
       rawText,
       REFERENCE_DATE,
@@ -194,7 +194,7 @@ describe("application workflow: catalog and modifications", () => {
       selection: null,
       updatePayload: null,
     };
-    harness.scriptLlm("llm.router", { intent: "modification" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.modification" }, [rawText]);
     harness.scriptLlm("llm.modification", parsedModification, [
       rawText,
       REFERENCE_DATE,

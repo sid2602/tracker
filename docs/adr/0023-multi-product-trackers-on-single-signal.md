@@ -56,28 +56,16 @@ Rationale: one Zod enum / string union stays simple for evals and `MessageAnalys
 **Stage 1 (product shell):**
 
 - Introduce `ProductModule` + move expense domains under `src/products/expenses/`.
-- Expense **routing cards use canonical** `intent` values (`expenses.create`, …). The composed router prompt therefore describes canonical intents.
-- The **live LLM output schema in Stage 1 may still use legacy** enum strings for backward compatibility with existing evals/fixtures: `expense`, `report`, `category`, `modification`, `ignore`.
-- Immediately after routing (before analyze/persist and before writing `parsed_json`), map legacy → canonical:
-
-| Legacy router string | Canonical ID |
-|----------------------|--------------|
-| `expense` | `expenses.create` |
-| `report` | `expenses.report` |
-| `category` | `expenses.category` |
-| `modification` | `expenses.modification` |
-| `ignore` | `ignore` |
-
-- If the Stage 1 LLM schema is switched early to canonical strings, the alias map is a no-op for those outputs but **must remain** for replay.
+- Expense **routing cards use canonical** `intent` values (`expenses.create`, …). The composed router prompt therefore describes **canonical** intents.
+- **Stage 1 live LLM schema also uses canonical** strings (same enum as cards). The legacy→canonical alias map remains for **replay** of pre-migration `parsed_json` / any residual legacy outputs; for new Stage-1 routes it is a no-op.
 - **`inbox.parsed_json` / `MessageAnalysis.intent` store the canonical ID** from Stage 1 onward (after the alias map). New analyzed rows must not store bare `expense`.
 - Replay of **pre-Stage-1** inbox rows that still contain legacy intents: `parseMessageAnalysis` (or a one-shot adapter) accepts legacy strings and normalizes to canonical before persist/dispatch. Covered by unit tests.
 - Handler maps inside the expenses product are keyed by **canonical** IDs in Stage 1.
 
 **Stage 2 (training core):**
 
-- Switch the **live router LLM schema** to emit namespaced strings directly (plus `ignore`).
+- Keep the live router on canonical strings; add `training.log` / `training.report` to the enum, cards, and registry.
 - Keep the legacy→canonical alias map for replay of any in-flight/old rows; do not bulk-rewrite historical inbox rows unless a test proves replay needs it.
-- Register training intents `training.log` / `training.report` in the same registry.
 
 ### 5. ProductModule, dispatch, and registry uniqueness
 

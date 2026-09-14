@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ExpenseResult } from "../../domains/expenses/schema.js";
+import type { ExpenseResult } from "../../products/expenses/domains/expenses/schema.js";
 import {
   createWorkflowHarness,
   FIRST_MESSAGE_TIMESTAMP,
@@ -33,7 +33,7 @@ describe("application workflow: failure and recovery", () => {
         },
       ],
     };
-    harness.scriptLlm("llm.router", { intent: "expense" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.create" }, [rawText]);
     harness.scriptLlm("llm.expense", parsedExpense, [rawText, REFERENCE_DATE]);
 
     await harness.runWorkflow(rawText, FIRST_MESSAGE_TIMESTAMP + 9);
@@ -82,7 +82,7 @@ describe("application workflow: failure and recovery", () => {
         },
       ],
     };
-    harness.scriptLlm("llm.router", { intent: "expense" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.create" }, [rawText]);
     harness.scriptLlm("llm.expense", parsedExpense, [rawText, REFERENCE_DATE]);
     harness.failNextSignalSend(new Error("Signal unavailable"));
 

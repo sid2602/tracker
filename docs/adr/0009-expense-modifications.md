@@ -2,6 +2,8 @@
 
 Date: 2026-09-04
 
+**Note (2026-09-14):** The modifications domain now lives at `src/products/expenses/domains/modifications/` (ADR 0023).
+
 ## Status
 
 Accepted
@@ -20,7 +22,7 @@ We will implement a hybrid approach: **Natural Language Referencing** backed by 
     *   Add a new `modification` intent to `routerLlmSchema` and the routing prompt.
     *   This intent will capture any requests to delete, remove, undo, or change an existing expense.
 
-2.  **New Domain (`src/domains/modifications/`)**:
+2.  **New Domain (`src/products/expenses/domains/modifications/`, originally `src/domains/modifications/`)**:
     *   Create a dedicated domain to handle `modification` intents.
     *   **LLM Extraction (`schema.ts`, `prompt.ts`)**: Extract the user's intent into structured data:
         *   `action`: `"delete"` | `"update"`

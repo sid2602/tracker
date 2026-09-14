@@ -20,7 +20,7 @@ sequenceDiagram
     User (Signal App)->>SignalCLI: "coffee 15 PLN"
     SignalCLI->>Worker: JSON-RPC receive line over TCP :6001
     Worker->>Router: Parse Intent
-    Router-->>Worker: Intent: 'expense'
+    Router-->>Worker: Intent: 'expense' (legacy LLM) → expenses.create
     Worker->>Domain: Dispatch to Expense Handler
     Domain->>Domain: Detailed LLM Extraction
     Domain-->>Worker: Validated JSON (Zod)
@@ -33,14 +33,15 @@ sequenceDiagram
 
 1. **Single Node.js Process:** No Express, Fastify, or additional web servers. A single `worker.ts` process owns the raw TCP JSON-RPC connection and its bounded receive dispatcher.
 2. **Two-Step LLM Routing:** 
-   - Step 1: Global Router identifies one intent (`expense`, `report`, `category`, `modification`, or `ignore`) using a small, strict Zod schema.
-   - Step 2: The selected domain handler executes a secondary, detailed LLM prompt for the specific task.
-3. **Database (SQLite):** 
+   - Step 1: Global Router classifies intent. Stage 1 still uses the legacy LLM enum (`expense`, `report`, `category`, `modification`, `ignore`), then immediately maps to canonical ids (`expenses.create`, …) before analyze/persist and `parsed_json` (ADR 0023).
+   - Step 2: The selected product domain handler executes a secondary, detailed LLM prompt for the specific task.
+3. **Products:** Business domains live under `src/products/<product>/domains/`. A `ProductModule` registry drives dispatch. Signal/inbox remain product-agnostic.
+4. **Database (SQLite):**
    - Uses `better-sqlite3` and `kysely`.
    - Financial amounts are stored strictly as `INTEGER` representing cents/groszy.
    - Requires transactions for data integrity.
-4. **Durable Inbox:** Signal payloads are persisted before processing and move through `pending -> analyzed -> saved -> confirmed`, with retry and delivery recovery. Terminal rows are retained for 90 days.
-5. **Vercel AI Gateway:** All LLM calls route through Vercel AI Gateway to easily swap providers (OpenAI/Anthropic) without changing application logic.
+5. **Durable Inbox:** Signal payloads are persisted before processing and move through `pending -> analyzed -> saved -> confirmed`, with retry and delivery recovery. Terminal rows are retained for 90 days.
+6. **Vercel AI Gateway:** All LLM calls route through Vercel AI Gateway to easily swap providers (OpenAI/Anthropic) without changing application logic.
 
 ## Directory Structure Map
 
@@ -51,7 +52,7 @@ src/
 ├── worker/
 │   ├── inbox.ts        # Stable inbox facade for ingest, processing, and polling
 │   ├── inbox/          # Inbox storage, policy, legacy handling, delivery, and runner
-│   └── dispatch.ts     # Core message routing and domain phase coordination
+│   └── dispatch.ts     # Registry-driven product analyze/persist coordination
 ├── signal/
 │   ├── client.ts       # Raw TCP JSON-RPC client and bounded receive lifecycle
 │   ├── receive-queue.ts # Bounded Buffer framer and FIFO receive dispatcher
@@ -59,12 +60,17 @@ src/
 ├── llm/
 │   ├── provider.ts     # Vercel AI Gateway setup
 │   └── generate.ts     # Wrapper around Vercel AI SDK generateObject
-├── routing/            # Global Router (Step 1)
-├── domains/
-│   ├── expenses/       # Expense parsing, schema, and DB repository
-│   ├── reports/        # Report generation, date boundaries, and DB queries
-│   ├── categories/     # Category catalog management
-│   └── modifications/  # Existing expense updates and deletion
+├── routing/            # Global Router (Step 1) + intent aliases
+├── products/
+│   ├── types.ts        # ProductModule contract
+│   ├── registry.ts     # Explicit product registry (unique ids/intents)
+│   ├── index.ts        # Registered products
+│   └── expenses/       # Expense product
+│       └── domains/
+│           ├── expenses/
+│           ├── reports/
+│           ├── categories/
+│           └── modifications/
 ├── db/
 │   ├── connection.ts   # Kysely & better-sqlite3 facade and schema orchestration
 │   ├── bootstrap.ts    # Base tables and indexes

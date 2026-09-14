@@ -18,13 +18,13 @@ vi.mock("../routing/router.js", () => ({
   routeMessage: (...args: unknown[]) => routeMessageMock(...args),
 }));
 
-vi.mock("../domains/expenses/index.js", () => ({
+vi.mock("../products/expenses/domains/expenses/index.js", () => ({
   handleExpense: (...args: unknown[]) => handleExpenseMock(...args),
   analyzeExpense: vi.fn(),
   persistExpense: vi.fn(),
 }));
 
-vi.mock("../domains/reports/index.js", () => ({
+vi.mock("../products/expenses/domains/reports/index.js", () => ({
   handleReport: vi.fn(),
   analyzeReport: vi.fn(),
   persistReport: vi.fn(),
@@ -70,7 +70,7 @@ describe("processMessage", () => {
   });
 
   it("maps handler failure to unrecognized", async () => {
-    routeMessageMock.mockResolvedValue({ intent: "expense" });
+    routeMessageMock.mockResolvedValue({ intent: "expenses.create" });
     handleExpenseMock.mockResolvedValue({
       kind: "failure",
       message: "invalid response",
