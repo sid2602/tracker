@@ -122,7 +122,7 @@ Isolation between trackers is **not** done with another phone number or another 
 1. namespaced product routing
 2. separate business tables per product
 3. fail-closed behavior when the product is ambiguous
-4. optional explicit user overrides (prefix / mode)
+4. fail-closed routing on ambiguity (prefixes/sticky deferred after Stage 2 per ADR 0023)
 
 ### 2.2 Target ingress model
 
@@ -170,16 +170,14 @@ Platform (signal, inbox, llm, worker shell)
 
 Still exactly two LLM stages for a normal message:
 
-1. **Router (cheap classify)** → `{ product, intent }` or a namespaced intent string (+ `ignore`)
+1. **Router (cheap classify)** → flat namespaced intent string (+ `ignore`), per ADR 0023
 2. **Domain parser (detailed extract)** → Zod-validated structure for that use-case
 
-Do **not** add a third LLM round-trip whose only job is “which tracker?”. On a Raspberry Pi that costs latency and tokens for little gain. Product selection belongs in the existing first-stage router.
+Do **not** add a third LLM round-trip whose only job is “which tracker?”. Product selection belongs in the existing first-stage router.
 
-### 3.3 Namespaced intents (required)
+### 3.3 Namespaced intents (required — ADR 0023)
 
-Do not reuse bare global names across products.
-
-**Option A — flat namespaced strings (simple for Zod / evals):**
+Canonical intents are **flat namespaced strings** (structured `{ product, intent }` is rejected):
 
 ```text
 expenses.create
@@ -188,23 +186,15 @@ expenses.category
 expenses.modification
 training.log
 training.report
-training.catalog
-training.modification
+training.modification   # Stage 3
 ignore
 ```
 
-**Option B — structured object:**
+Rules:
 
-```ts
-{ product: "expenses" | "training", intent: "create" | "report" | ... }
-// plus top-level ignore
-```
-
-Either is fine if documented in the ADR. What matters:
-
-- no colliding `report` / `modification` across products in one enum
-- `ActionableIntent` / routing cards / analysis union stay derivable from one source of truth
-- eval fixtures name the full intent clearly
+- no colliding bare `report` / `modification` across products
+- routing cards, dispatch, and `parsed_json` use canonical IDs (legacy LLM strings alias-mapped in Stage 1)
+- eval fixtures name the full canonical intent
 
 ### 3.4 Training MVP intents (decided direction)
 
@@ -458,7 +448,7 @@ Useful unique/index patterns (finalize in implementation):
 
 #### How “today’s training” is known
 
-1. **Product:** router chooses `training.log` (not expenses) — same Signal number, semantic (or prefix) routing
+1. **Product:** router chooses `training.log` (not expenses) — same Signal number, semantic routing (no prefixes in Stages 1–2)
 2. **Day:** `occurred_on` from the message (“dziś” / “wczoraj” / explicit date), defaulting to today in `Europe/Warsaw`
 3. **Workout grouping:** report query loads entries for that day ordered by `source_timestamp`; optionally **display** separate blocks when the gap between entries exceeds a threshold (e.g. 90 minutes). That gap logic is **presentation-only**, not a stored session
 
@@ -469,7 +459,7 @@ Two workouts on the same day = two clusters in the list (by time), still one fla
 | User style | Behavior |
 |------------|----------|
 | After each set: `podciąganie 8` then later `podciąganie 8` then `podciąganie 7` | Three rows; no start/end |
-| Prescription then correction: `podciąganie 3x8` then `3 seria 7` | First message inserts three rows @ 8; follow-up **updates** set 3 → 7 (or inserts a corrective modification — prefer update of the targeted set) |
+| Prescription then correction: `podciąganie 3x8` then `3 seria 7` | **Stage 3:** first message inserts three rows @ 8; follow-up updates set 3 → 7. **Stage 2:** correction messages are fail-closed (no partial update) |
 | EMOM / AMRAP / cardio | Same table; use `kind` + `duration_seconds` / `note` / `reps` as applicable — no per-format tables |
 | Whole WOD in one message | Still fine: multiple `item_index` rows from one parse |
 
@@ -506,7 +496,7 @@ Examples:
 | `How much did I spend on coffee this week?` | `expenses.report` |
 | `podciąganie 8` | `training.log` |
 | `podciąganie 3x8` | `training.log` |
-| `3 seria 7` / `ostatnia 7` (in training context) | `training.log` or `training.modification` |
+| `3 seria 7` / `ostatnia 7` (correction after `3x8`) | **Stage 3 only** — `training.modification` / correction path; Stage 2 → fail-closed `ignore` if not a clear new set log |
 | `EMOM 12: thruster 15` | `training.log` |
 | `Co robiłem na treningu wczoraj?` | `training.report` |
 
@@ -524,46 +514,35 @@ The global router prompt must include:
 - **No** required start/end workout commands
 - **Day** comes from `occurred_on`; **product** from the router
 - Reports answer “what did I do today?” by listing/grouping entries — not by reading a session row
-- Optional prefixes (`t:`) remain an escape hatch only
+- **Prefixes / sticky mode are unavailable in Stages 1–2** (ADR 0023); semantic routing only until revisited after Stage 2
 
 ### 7.2 Ambiguity: fail-closed
 
 When product or intent is unclear (mixed goals, underspecified numbers, “80” alone):
 
-- do **not** silently guess a product
-- prefer `ignore` **or** a short clarification reply (product decision in ADR: silent ignore vs ask-user)
+- do **not** guess a product
+- use silent **`ignore`** (ADR 0023); clarification replies are deferred after Stage 2
+- raw message may still enter shared `inbox`, but **no product business tables** are written
 - never write to the wrong product tables
 
 This matches the project’s fail-closed instinct (e.g. expense modifications ADR 0017).
 
-### 7.3 Optional explicit overrides (safety net, not primary UX)
+### 7.3 Explicit overrides (deferred after Stage 2)
 
-Useful on one number without mode-confusing UI:
+Per ADR 0023, prefixes and sticky modes are **not** part of Stages 1–2. Everyday use is semantic routing only.
+
+Possible later escape hatches (only if Stage 2 routing proves insufficient):
 
 | Mechanism | Example | Behavior |
 |-----------|---------|----------|
-| Prefix | `e: coffee 15` / `t: 3x squat 80` | Force product, then normal domain routing/parsing |
-| Verbose prefix | `expense:` / `training:` | Same |
-| Sticky mode | `mode training` / `mode expenses` | Until switched; store mode outside inbox row (design carefully; optional phase 2+) |
-
-Overrides should be documented as **escape hatches**. Everyday use should work without them.
+| Prefix | `e: coffee 15` / `t: podciąganie 8` | Force product, then normal domain routing/parsing |
+| Sticky mode | `mode training` / `mode expenses` | Until switched; storage design TBD |
 
 ### 7.4 Multi-intent messages
 
-Today expense routing uses a fixed priority (category → modification → report → expense).
+**Within one product** (expenses today): keep the existing fixed domain priority (category → modification → report → expense / create).
 
-Multi-product needs an explicit policy, for example:
-
-1. Resolve product first (or treat cross-product mix as ambiguous)
-2. Then apply product-local domain priority
-3. Or: always fail-closed if two products appear in one message
-
-**Recommendation to decide in ADR:** if a message clearly contains both an expense create and a training log, either:
-
-- pick a documented global priority, **or**
-- ask / ignore rather than partial-apply one side
-
-Partial-apply is dangerous with durable inbox (one analysis blob, one reply).
+**Across products** (ADR 0023): if a message clearly contains goals for two products (e.g. expense create + training log), the router must **fail-closed → `ignore`**. Do not pick a “main” product and do not partial-apply. The envelope may still enter shared `inbox` and become ignored; no product business tables are written.
 
 ### 7.5 Prompt size budget
 
@@ -605,14 +584,15 @@ A stage is **done** only when every exit check passes. Do not start stage N+1 un
 **Goal:** Lock architecture before code moves.
 
 **Scope:**
-- [ ] Write ADR: multi-product on one Signal ingress
-- [ ] Include locked training model (`training_entries`, no sessions, set-by-set, `kind` ≠ categories)
-- [ ] Resolve or explicitly defer every item in §14
-- [ ] Get explicit approval
+- [x] Write ADR: multi-product on one Signal ingress (`docs/adr/0023-multi-product-trackers-on-single-signal.md`)
+- [x] Include locked training model (`training_entries`, no sessions, set-by-set, `kind` ≠ categories)
+- [x] Resolve or explicitly defer every item in §14
+- [x] Get approval via herdr review (3 iters on `w1:p1` / Code Architecture Review); final leftover §7.4 fixed post-loop
 
 **Exit checks:**
-- [ ] ADR exists under `docs/adr/` and is accepted
-- [ ] §14 has no unresolved blockers for stage 1 (deferred items marked “later”)
+- [x] ADR exists under `docs/adr/`
+- [x] ADR status set to **Accepted**
+- [x] §14 decisions resolved or deferred in ADR 0023
 
 **Out of scope:** any production code moves.
 
@@ -774,21 +754,21 @@ These are agreed for the plan / ADR draft — do not re-litigate unless requirem
 
 ---
 
-## 14. Open decisions still to lock in the ADR
+## 14. Open decisions — resolved in ADR 0023
 
-Resolve before **stage 1** (or mark deferred with a stage):
+| # | Decision | Resolution |
+|---|----------|------------|
+| 1 | Intent encoding | **Flat namespaced strings** (`expenses.create`, `training.log`, …) |
+| 2 | Namespace timing | **Stage 1:** LLM may emit legacy strings; map to canonical immediately; **`parsed_json` stores canonical**; legacy accepted on replay. **Stage 2:** live router emits namespaced; keep alias map for old rows |
+| 3 | Ambiguity UX | **`ignore` (silent)**; clarification deferred |
+| 4 | Cross-product multi-intent | **Fail-closed → `ignore`** (no partial apply) |
+| 5 | Overrides in Stage 2 | **None**; prefixes/sticky later if needed |
+| 6 | Set correction | **Stage 3 only** |
+| 7 | Time-gap clustering | **Off in Stage 2**; chronological day list only |
+| 8 | `kind` enum (Stage 2 min) | **`strength \| emom \| cardio \| other`** |
+| 9 | Analysis version | Prefer **`version: 1` additive**; bump only if rename breaks replay |
 
-| # | Decision | Blocks |
-|---|----------|--------|
-| 1 | Intent encoding: flat `expenses.create` vs `{ product, intent }` | Stage 1–2 |
-| 2 | Namespace timing: rename expense intents in stage 1 vs at stage 2 | Stage 1 |
-| 3 | Ambiguity UX: silent `ignore` vs clarification reply | Stage 2 |
-| 4 | Cross-product multi-intent: priority vs fail-closed | Stage 2 |
-| 5 | Overrides in stage 2: prefixes / none (sticky mode = later unless needed) | Stage 2 |
-| 6 | Set correction in stage 2 vs **only stage 3** (recommended: stage 3) | Stage 2 scope |
-| 7 | Time-gap display clustering in stage 2: on/off + threshold | Stage 2 |
-| 8 | Exact `kind` enum for stage 2 minimum set | Stage 2 |
-| 9 | Analysis `version`: keep `1` additive vs bump on rename | Stage 1–2 |
+Source of truth: `docs/adr/0023-multi-product-trackers-on-single-signal.md`
 
 ---
 
