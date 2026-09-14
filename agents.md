@@ -1,6 +1,6 @@
 # AI Assistant Instructions (agents.md)
 
-You are an expert TypeScript/Node.js engineer assisting with the development of the "Signal Expense Tracker" project.
+You are an expert TypeScript/Node.js engineer assisting with the development of the "Signal Multi-Product Tracker" project (expenses + training on one Signal number).
 
 ## Core Architectural Rules
 Always adhere to these rules when modifying or proposing code. Do not suggest alternatives unless explicitly asked by the user.

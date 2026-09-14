@@ -24,7 +24,12 @@ describe("database bootstrap", () => {
 
     const tables = await db.introspection.getTables();
     expect(tables.map((table) => table.name)).toEqual(
-      expect.arrayContaining(["expenses", "inbox", "categories"]),
+      expect.arrayContaining([
+        "expenses",
+        "inbox",
+        "categories",
+        "training_entries",
+      ]),
     );
   });
 
@@ -61,6 +66,17 @@ describe("database bootstrap", () => {
       expect.arrayContaining([
         "inbox_processing_idx",
         "inbox_receive_sequence_unique",
+      ]),
+    );
+
+    const trainingIndexes = await sql<IndexRow>`
+      PRAGMA index_list("training_entries")
+    `.execute(db);
+    expect(trainingIndexes.rows.map((index) => index.name)).toEqual(
+      expect.arrayContaining([
+        "training_entries_message_item_unique",
+        "training_entries_day_time_idx",
+        "training_entries_exercise_day_idx",
       ]),
     );
   });

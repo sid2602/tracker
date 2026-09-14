@@ -52,6 +52,26 @@ export async function createTables(
     .addColumn("created_at", "text", (col) => col.notNull())
     .execute();
 
+  await db.schema
+    .createTable("training_entries")
+    .ifNotExists()
+    .addColumn("id", "integer", (col) => col.primaryKey())
+    .addColumn("source_message_key", "text")
+    .addColumn("source_author", "text", (col) => col.notNull())
+    .addColumn("source_timestamp", "integer", (col) => col.notNull())
+    .addColumn("item_index", "integer", (col) => col.notNull())
+    .addColumn("occurred_on", "text", (col) => col.notNull())
+    .addColumn("exercise", "text", (col) => col.notNull())
+    .addColumn("set_index", "integer")
+    .addColumn("reps", "integer")
+    .addColumn("weight_grams", "integer")
+    .addColumn("duration_seconds", "integer")
+    .addColumn("kind", "text")
+    .addColumn("note", "text", (col) => col.notNull())
+    .addColumn("raw_text", "text", (col) => col.notNull())
+    .addColumn("created_at", "text", (col) => col.notNull())
+    .execute();
+
   return { categoriesCreated: !categoriesExisted };
 }
 
@@ -84,5 +104,27 @@ export async function createIndexes(db: Kysely<AppDatabase>): Promise<void> {
     .ifNotExists()
     .on("expenses")
     .columns(["occurred_on", "category", "currency"])
+    .execute();
+
+  await db.schema
+    .createIndex("training_entries_message_item_unique")
+    .ifNotExists()
+    .unique()
+    .on("training_entries")
+    .columns(["source_message_key", "item_index"])
+    .execute();
+
+  await db.schema
+    .createIndex("training_entries_day_time_idx")
+    .ifNotExists()
+    .on("training_entries")
+    .columns(["occurred_on", "source_timestamp", "item_index"])
+    .execute();
+
+  await db.schema
+    .createIndex("training_entries_exercise_day_idx")
+    .ifNotExists()
+    .on("training_entries")
+    .columns(["exercise", "occurred_on"])
     .execute();
 }

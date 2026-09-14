@@ -627,22 +627,22 @@ A stage is **done** only when every exit check passes. Do not start stage N+1 un
 **Goal:** On the same Signal number, log sets across many messages and read them back by day — no start/end session commands.
 
 **Scope:**
-- [ ] `src/products/training/` + table `training_entries` only
-- [ ] `training.log`: single-set messages + `NxR` expansion; multi-message same day
-- [ ] `training.report`: list by day (and basic period); time order; optional time-gap **display** only
-- [ ] Register training product; cross-product router contrastives
-- [ ] Basic `kind` for strength + at least one non-strength example (EMOM or cardio)
-- [ ] Unit + eval + workflow coverage for the above
+- [x] `src/products/training/` + table `training_entries` only
+- [x] `training.log`: single-set messages + `NxR` expansion; multi-message same day
+- [x] `training.report`: list by day (and basic period); time order; optional time-gap **display** only
+- [x] Register training product; cross-product router contrastives
+- [x] Basic `kind` for strength + at least one non-strength example (EMOM or cardio)
+- [x] Unit + eval + workflow coverage for the above
 
 **Exit checks:**
-- [ ] `npm run verify` passes
-- [ ] **Log:** ≥3 separate same-day messages (e.g. `podciąganie 8` then `8` then `7`) → ≥3 `training_entries` with the same `occurred_on`
-- [ ] **Prescription:** `podciąganie 3x8` → exactly 3 rows @ 8 reps
-- [ ] **Report:** day/yesterday query returns those entries in time order
-- [ ] **Isolation:** expense message does not write `training_entries`; training message does not write `expenses`
-- [ ] Training parser evals (EN + PL) for single-set + `NxR` pass
-- [ ] Router evals include expense vs training contrasts and pass
-- [ ] All stage-1 expense exit checks still pass
+- [x] `npm run verify` passes
+- [x] **Log:** ≥3 separate same-day messages (e.g. `podciąganie 8` then `8` then `7`) → ≥3 `training_entries` with the same `occurred_on`
+- [x] **Prescription:** `podciąganie 3x8` → exactly 3 rows @ 8 reps
+- [x] **Report:** day/yesterday query returns those entries in time order
+- [x] **Isolation:** expense message does not write `training_entries`; training message does not write `expenses`
+- [x] Training parser evals (EN + PL) for single-set + `NxR` pass
+- [x] Router evals include expense vs training contrasts and pass
+- [x] All stage-1 expense exit checks still pass
 
 **Out of scope:** reliable `3 seria 7` after `3x8`, full modify/delete UX, exercise catalog, sticky mode (unless ADR required it).
 
@@ -733,7 +733,7 @@ Do not call a stage done on green unit tests alone if its §9 workflow/eval exit
 
 - [ ] **Stage 0:** ADR accepted
 - [ ] **Stage 1:** `architecture.md` describes `products/` layout; AGENTS.md still accurate for domain pattern under products
-- [ ] **Stage 2:** README notes training exists (short); router/docs mention two products
+- [x] **Stage 2:** README notes training exists (short); router/docs mention two products
 - [ ] **Stage 3:** no extra docs required unless catalog/new UX ships
 - [ ] Backups remain one SQLite file unless something large is added (should not)
 

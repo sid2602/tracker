@@ -1,6 +1,6 @@
-# Signal Expense Tracker
+# Signal Multi-Product Tracker
 
-A background worker process connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC to categorize and track expenses via a Signal conversation. Built with TypeScript, Node.js, and Vercel AI SDK.
+A background worker connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC. One Signal number hosts multiple products (expenses + training) via semantic routing into a shared SQLite inbox. Built with TypeScript, Node.js, and Vercel AI SDK.
 
 ## Commands
 

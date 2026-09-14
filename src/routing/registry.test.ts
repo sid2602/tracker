@@ -12,6 +12,8 @@ describe("routing registry", () => {
       "expenses.modification",
       "expenses.report",
       "expenses.create",
+      "training.report",
+      "training.log",
     ]);
 
     expect(new Set(ROUTING_CARDS.map((card) => card.intent)).size).toBe(

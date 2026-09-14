@@ -42,7 +42,12 @@ type RouterBoundary =
   | "mixed-category-modification"
   | "mixed-expense-ignore"
   | "multi-intent-priority"
-  | "prompt-injection";
+  | "prompt-injection"
+  | "training-log"
+  | "training-report"
+  | "contrastive-training-expense"
+  | "contrastive-training-report"
+  | "cross-product-ignore";
 
 type RouterEvalCase = {
   input: string;
@@ -155,7 +160,7 @@ const TYPO_ROUTER_EVALS: RouterEvalCase[] = [
 ];
 
 const SEMANTIC_TYPO_ROUTER_EVALS: RouterEvalCase[] = [
-  { input: "lista dzidiaj", expected: "expenses.report", language: "pl", boundary: "typo-substitution" },
+  { input: "lista wydatkow dzidiaj", expected: "expenses.report", language: "pl", boundary: "typo-substitution" },
   { input: "show my expneses today", expected: "expenses.report", language: "en", boundary: "typo-transposition" },
   { input: "how much did I spen this month?", expected: "expenses.report", language: "en", boundary: "typo-omission" },
   { input: "pokaz wydatki dzisiaj", expected: "expenses.report", language: "pl", boundary: "typo-diacritic" },
@@ -197,6 +202,28 @@ const PROMPT_INJECTION_ROUTER_EVALS: RouterEvalCase[] = [
   },
 ];
 
+const TRAINING_ROUTER_EVALS: RouterEvalCase[] = [
+  { input: "podciąganie 8", expected: "training.log", language: "pl", boundary: "training-log" },
+  { input: "przysiad 3x8 80kg", expected: "training.log", language: "pl", boundary: "training-log" },
+  { input: "pull-ups 8", expected: "training.log", language: "en", boundary: "training-log" },
+  { input: "squat 3x8 80kg", expected: "training.log", language: "en", boundary: "training-log" },
+  { input: "EMOM 12: thruster 15", expected: "training.log", language: "en", boundary: "training-log" },
+  { input: "co robiłem na treningu dziś?", expected: "training.report", language: "pl", boundary: "training-report" },
+  { input: "what did I train yesterday?", expected: "training.report", language: "en", boundary: "training-report" },
+  { input: "ile podciągnięć zrobiłem dziś?", expected: "training.report", language: "pl", boundary: "training-report" },
+  { input: "kawa 15 zł", expected: "expenses.create", language: "pl", boundary: "contrastive-training-expense" },
+  { input: "podciąganie 8", expected: "training.log", language: "pl", boundary: "contrastive-training-expense" },
+  { input: "coffee 15 PLN", expected: "expenses.create", language: "en", boundary: "contrastive-training-expense" },
+  { input: "pull-ups 8", expected: "training.log", language: "en", boundary: "contrastive-training-expense" },
+  { input: "how much did I spend on coffee?", expected: "expenses.report", language: "en", boundary: "contrastive-training-report" },
+  { input: "how many pull-ups did I do today?", expected: "training.report", language: "en", boundary: "contrastive-training-report" },
+  { input: "kawa 15 zł i 3 serie przysiadów", expected: "ignore", language: "pl", boundary: "cross-product-ignore" },
+  { input: "coffee 20 and squat 3x8", expected: "ignore", language: "en", boundary: "cross-product-ignore" },
+  { input: "3 seria 7", expected: "ignore", language: "pl", boundary: "training-log" },
+  { input: "ostatnia 7", expected: "ignore", language: "pl", boundary: "training-log" },
+  { input: "last set 7", expected: "ignore", language: "en", boundary: "training-log" },
+];
+
 const ROUTER_EVALS: RouterEvalCase[] = [
   ...REGRESSION_ROUTER_EVALS,
   ...BASE_ROUTER_EVALS,
@@ -207,6 +234,7 @@ const ROUTER_EVALS: RouterEvalCase[] = [
   ...MIXED_LANGUAGE_ROUTER_EVALS,
   ...MULTI_INTENT_ROUTER_EVALS,
   ...PROMPT_INJECTION_ROUTER_EVALS,
+  ...TRAINING_ROUTER_EVALS,
 ];
 
 describe.runIf(process.env.RUN_EVALS === "true")("LLM Router Evals", () => {

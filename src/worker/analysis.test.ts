@@ -74,6 +74,32 @@ describe("message analysis persistence", () => {
     );
   });
 
+  it("round-trips a training log command", () => {
+    const analysis: MessageAnalysis = {
+      version: 1,
+      intent: "training.log",
+      parsed: {
+        entries: [
+          {
+            exercise: "podciąganie",
+            occurredOn: "2026-09-14",
+            kind: "strength",
+            reps: 8,
+            weightGrams: null,
+            durationSeconds: null,
+            setIndex: 1,
+            setsCount: null,
+            note: "",
+          },
+        ],
+      },
+    };
+
+    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(
+      analysis,
+    );
+  });
+
   it("rejects an invalid persisted command", () => {
     expect(() =>
       messageAnalysisSchema.parse({

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildProductRegistry } from "./registry.js";
 import { expensesProduct } from "./expenses/index.js";
+import { trainingProduct } from "./training/index.js";
 import type { ProductModule } from "./types.js";
 
 describe("buildProductRegistry", () => {
@@ -15,6 +16,24 @@ describe("buildProductRegistry", () => {
       "expenses.report",
       "expenses.create",
     ]);
+  });
+
+  it("registers expenses and training together", () => {
+    const registry = buildProductRegistry([expensesProduct, trainingProduct]);
+    expect(registry.products.map((product) => product.id)).toEqual([
+      "expenses",
+      "training",
+    ]);
+    expect(registry.routingCards.map((card) => card.intent)).toEqual([
+      "expenses.category",
+      "expenses.modification",
+      "expenses.report",
+      "expenses.create",
+      "training.report",
+      "training.log",
+    ]);
+    expect(registry.handleByIntent.has("training.log")).toBe(true);
+    expect(registry.handleByIntent.has("training.report")).toBe(true);
   });
 
   it("rejects duplicate product ids", () => {

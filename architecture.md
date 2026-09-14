@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the high-level architecture and data flow of the Signal Expense Tracker.
+This document describes the high-level architecture and data flow of the Signal multi-product tracker (expenses + training).
 
 ## Data Flow
 
@@ -17,28 +17,29 @@ sequenceDiagram
     participant Domain as Domain Handler (LLM)
     participant DB as SQLite (Kysely)
 
-    User (Signal App)->>SignalCLI: "coffee 15 PLN"
+    User (Signal App)->>SignalCLI: "coffee 15 PLN" / "podciąganie 8"
     SignalCLI->>Worker: JSON-RPC receive line over TCP :6001
     Worker->>Router: Parse Intent
-    Router-->>Worker: Intent: 'expense' (legacy LLM) → expenses.create
-    Worker->>Domain: Dispatch to Expense Handler
+    Router-->>Worker: Canonical intent (expenses.create / training.log / …)
+    Worker->>Domain: Dispatch via ProductModule registry
     Domain->>Domain: Detailed LLM Extraction
     Domain-->>Worker: Validated JSON (Zod)
-    Worker->>DB: SQLite Transaction (INSERT)
+    Worker->>DB: SQLite Transaction (product table INSERT)
     Worker->>SignalCLI: JSON-RPC send over TCP :6001
-    SignalCLI-->>User (Signal App): "Saved 1 item"
+    SignalCLI-->>User (Signal App): Confirmation / report
 ```
 
 ## Core Principles
 
 1. **Single Node.js Process:** No Express, Fastify, or additional web servers. A single `worker.ts` process owns the raw TCP JSON-RPC connection and its bounded receive dispatcher.
 2. **Two-Step LLM Routing:** 
-   - Step 1: Global Router classifies intent. Stage 1 still uses the legacy LLM enum (`expense`, `report`, `category`, `modification`, `ignore`), then immediately maps to canonical ids (`expenses.create`, …) before analyze/persist and `parsed_json` (ADR 0023).
+   - Step 1: Global Router classifies into canonical intents (`expenses.*`, `training.*`, `ignore`). Legacy expense intent strings are accepted only when replaying old `parsed_json` (ADR 0023).
    - Step 2: The selected product domain handler executes a secondary, detailed LLM prompt for the specific task.
-3. **Products:** Business domains live under `src/products/<product>/domains/`. A `ProductModule` registry drives dispatch. Signal/inbox remain product-agnostic.
+3. **Products:** Business domains live under `src/products/<product>/domains/`. A `ProductModule` registry drives dispatch. Signal/inbox remain product-agnostic. Cross-product mixed messages are fail-closed to `ignore`.
 4. **Database (SQLite):**
    - Uses `better-sqlite3` and `kysely`.
    - Financial amounts are stored strictly as `INTEGER` representing cents/groszy.
+   - Training metrics use `INTEGER` grams / seconds / reps (no floats).
    - Requires transactions for data integrity.
 5. **Durable Inbox:** Signal payloads are persisted before processing and move through `pending -> analyzed -> saved -> confirmed`, with retry and delivery recovery. Terminal rows are retained for 90 days.
 6. **Vercel AI Gateway:** All LLM calls route through Vercel AI Gateway to easily swap providers (OpenAI/Anthropic) without changing application logic.
@@ -65,12 +66,16 @@ src/
 │   ├── types.ts        # ProductModule contract
 │   ├── registry.ts     # Explicit product registry (unique ids/intents)
 │   ├── index.ts        # Registered products
-│   └── expenses/       # Expense product
+│   ├── expenses/       # Expense product
+│   │   └── domains/
+│   │       ├── expenses/
+│   │       ├── reports/
+│   │       ├── categories/
+│   │       └── modifications/
+│   └── training/       # Training product
 │       └── domains/
-│           ├── expenses/
-│           ├── reports/
-│           ├── categories/
-│           └── modifications/
+│           ├── entries/   # training.log
+│           └── reports/   # training.report
 ├── db/
 │   ├── connection.ts   # Kysely & better-sqlite3 facade and schema orchestration
 │   ├── bootstrap.ts    # Base tables and indexes
