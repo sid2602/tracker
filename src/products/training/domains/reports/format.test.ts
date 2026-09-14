@@ -20,6 +20,8 @@ describe("formatTrainingList", () => {
         note: "",
         source_timestamp: 1,
         item_index: 0,
+        source_message_key: "m1",
+        source_author: "+1",
       },
     ]);
     expect(message).toContain("podciąganie");

@@ -219,9 +219,11 @@ const TRAINING_ROUTER_EVALS: RouterEvalCase[] = [
   { input: "how many pull-ups did I do today?", expected: "training.report", language: "en", boundary: "contrastive-training-report" },
   { input: "kawa 15 zł i 3 serie przysiadów", expected: "ignore", language: "pl", boundary: "cross-product-ignore" },
   { input: "coffee 20 and squat 3x8", expected: "ignore", language: "en", boundary: "cross-product-ignore" },
-  { input: "3 seria 7", expected: "ignore", language: "pl", boundary: "training-log" },
-  { input: "ostatnia 7", expected: "ignore", language: "pl", boundary: "training-log" },
-  { input: "last set 7", expected: "ignore", language: "en", boundary: "training-log" },
+  { input: "3 seria 7", expected: "training.modification", language: "pl", boundary: "training-log" },
+  { input: "ostatnia 7", expected: "training.modification", language: "pl", boundary: "training-log" },
+  { input: "last set 7", expected: "training.modification", language: "en", boundary: "training-log" },
+  { input: "usuń ostatni wpis treningowy", expected: "training.modification", language: "pl", boundary: "training-log" },
+  { input: "delete training entry #12", expected: "training.modification", language: "en", boundary: "training-log" },
 ];
 
 const ROUTER_EVALS: RouterEvalCase[] = [

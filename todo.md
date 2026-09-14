@@ -653,20 +653,20 @@ A stage is **done** only when every exit check passes. Do not start stage N+1 un
 **Goal:** Trustworthy corrections/edits; training closer to expense quality bar.
 
 **Scope:**
-- [ ] Correction: after `podciąganie 3x8`, `3 seria 7` / `ostatnia 7` updates the right row
-- [ ] Modifications/deletes for prior entries (fail-closed where needed)
-- [ ] Richer reports only as needed (by exercise, simple aggregates)
+- [x] Correction: after `podciąganie 3x8`, `3 seria 7` / `ostatnia 7` updates the right row
+- [x] Modifications/deletes for prior entries (fail-closed where needed)
+- [x] Richer reports only as needed (by exercise, simple aggregates)
 - [ ] Broader `kind` only if evals/use demand it
 - [ ] Exercise catalog only if free-text naming is still painful
-- [ ] Trust-boundary / validation parity with expense domains where applicable
+- [x] Trust-boundary / validation parity with expense domains where applicable
 
 **Exit checks:**
-- [ ] `npm run verify` passes
-- [ ] **Correction workflow:** `3x8` then `3 seria 7` → reps `8,8,7` (or equivalent asserted DB/report outcome)
-- [ ] **Modify/delete:** ≥1 happy path + ≥1 fail-closed case in tests
-- [ ] Correction (+ mods if shipped) evals pass (EN + PL as relevant)
-- [ ] Stage-2 exit checks still pass
-- [ ] Expense `verify` + expense workflows still pass
+- [x] `npm run verify` passes
+- [x] **Correction workflow:** `3x8` then `3 seria 7` → reps `8,8,7` (or equivalent asserted DB/report outcome)
+- [x] **Modify/delete:** ≥1 happy path + ≥1 fail-closed case in tests
+- [x] Correction (+ mods if shipped) evals pass (EN + PL as relevant)
+- [x] Stage-2 exit checks still pass
+- [x] Expense `verify` + expense workflows still pass
 
 **Out of scope:** a third product (repeat stage-1 wiring + stage-2 product work later).
 
@@ -734,7 +734,7 @@ Do not call a stage done on green unit tests alone if its §9 workflow/eval exit
 - [ ] **Stage 0:** ADR accepted
 - [ ] **Stage 1:** `architecture.md` describes `products/` layout; AGENTS.md still accurate for domain pattern under products
 - [x] **Stage 2:** README notes training exists (short); router/docs mention two products
-- [ ] **Stage 3:** no extra docs required unless catalog/new UX ships
+- [x] **Stage 3:** no extra docs required unless catalog/new UX ships
 - [ ] Backups remain one SQLite file unless something large is added (should not)
 
 ---

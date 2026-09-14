@@ -34,6 +34,7 @@ Return exactly one intent from this enum:
 - "expenses.modification"
 - "training.log"
 - "training.report"
+- "training.modification"
 - "ignore"
 
 Do not extract amounts, dates, categories, reps, or IDs. Do not translate the message. Do not provide a rationale.
@@ -51,11 +52,12 @@ Cross-product rule first: choose "ignore" ONLY when the message clearly contains
 Same-product multi-intent is NOT ignore: when two or more goals are all within expenses (or all within training), pick exactly one intent using the priority below — never "ignore" just because multiple same-product goals appear.
 1. "expenses.category": the user operates on the expense category catalog.
 2. "expenses.modification": the user operates on an existing expense.
-3. "expenses.report": the user queries recorded expenses from a past or current period.
-4. "training.report": the user queries recorded training entries from a past or current period.
-5. "expenses.create": the user records a new purchase or payment.
-6. "training.log": the user logs a training set, prescription, EMOM/cardio line, or similar.
-7. "ignore": no supported action is requested (or cross-product mix).
+3. "training.modification": the user corrects, updates, or deletes an existing training entry/set.
+4. "expenses.report": the user queries recorded expenses from a past or current period.
+5. "training.report": the user queries recorded training entries from a past or current period.
+6. "expenses.create": the user records a new purchase or payment.
+7. "training.log": the user logs a training set, prescription, EMOM/cardio line, or similar.
+8. "ignore": no supported action is requested (or cross-product mix).
 
 Do not choose a subjective "main goal" when multiple goals are present. Always use the priority above (and the cross-product ignore rule).
 The router returns one intent only; a later domain handler performs the detailed parsing.
@@ -70,6 +72,7 @@ GLOBAL CROSS-DOMAIN BOUNDARIES
 - "delete category food" and "Usuń kategorię jedzenie" are "expenses.category"; "delete the food expense" and "Usuń wydatek na jedzenie" are "expenses.modification".
 - A category name mentioned inside a new purchase does not make the message a category operation.
 - A set log like "podciąganie 8" or "squat 3x8 80kg" is "training.log". "Co robiłem na treningu wczoraj?" is "training.report".
+- Short set corrections like "3 seria 7", "ostatnia 7", or "last set 7" are "training.modification", not "training.log".
 - Money/purchase language is expenses; reps/sets/kg/EMOM/cardio/workout language is training.
 - If a message mixes a purchase and a training set in one text, choose "ignore".
 - Greetings, small talk, uncertainty, unrelated facts, and automated bot acknowledgements are "ignore". A transaction statement is not "ignore". A clear set log is not "ignore".
@@ -78,7 +81,6 @@ IGNORE EXAMPLES
 - "hej, co tam?", "hello, how are you?", "Hallo, wie geht es dir?", "Hola, ¿cómo estás?", "Привіт, як справи?"
 - "✅ Saved 1 item", "Nie pamiętam ile wydałem", "No recuerdo cuánto gasté"
 - "kawa 15 zł i 3 serie przysiadów" (expense + training in one message)
-- "3 seria 7", "ostatnia 7", "last set 7" (set corrections are not Stage-2 log intents)
 
 CONTRASTIVE EXAMPLES
 - "I paid 25 PLN for coffee" -> "expenses.create"; "How much did I pay for coffee?" -> "expenses.report".
@@ -88,7 +90,7 @@ CONTRASTIVE EXAMPLES
 - "I bought coffee" -> "expenses.create"; "I don't remember buying coffee" -> "ignore".
 - "Paid 30 for lunch" -> "expenses.create"; "✅ Saved 30 for lunch" -> "ignore".
 - "podciąganie 8" -> "training.log"; "ile podciągnięć zrobiłem dziś?" -> "training.report".
-- "przysiad 3x8" -> "training.log"; "kawa 15 zł" -> "expenses.create".
+- "przysiad 3x8" -> "training.log"; "3 seria 7" -> "training.modification".
 - "EMOM 12 thrusters" -> "training.log"; "how much did I spend on coffee?" -> "expenses.report".
 
 MULTI-INTENT EXAMPLES

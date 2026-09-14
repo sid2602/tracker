@@ -4,6 +4,7 @@ import { expenseResultSchema } from "../products/expenses/domains/expenses/schem
 import { modificationResultSchema } from "../products/expenses/domains/modifications/schema.js";
 import { reportParamsSchema } from "../products/expenses/domains/reports/schema.js";
 import { trainingLogResultSchema } from "../products/training/domains/entries/schema.js";
+import { trainingModificationResultSchema } from "../products/training/domains/modifications/schema.js";
 import { trainingReportParamsSchema } from "../products/training/domains/reports/schema.js";
 import { toCanonicalIntent } from "../routing/intents.js";
 
@@ -39,6 +40,11 @@ export const messageAnalysisSchema = z.discriminatedUnion("intent", [
     version: analysisVersionSchema,
     intent: z.literal("training.report"),
     parsed: trainingReportParamsSchema,
+  }),
+  z.object({
+    version: analysisVersionSchema,
+    intent: z.literal("training.modification"),
+    parsed: trainingModificationResultSchema,
   }),
   z.object({
     version: analysisVersionSchema,

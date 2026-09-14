@@ -8,6 +8,7 @@ export const CANONICAL_ACTIONABLE_INTENTS = [
   "expenses.modification",
   "training.log",
   "training.report",
+  "training.modification",
 ] as const;
 
 export type CanonicalActionableIntent =

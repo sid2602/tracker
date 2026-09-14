@@ -12,6 +12,7 @@ describe("routing registry", () => {
       "expenses.modification",
       "expenses.report",
       "expenses.create",
+      "training.modification",
       "training.report",
       "training.log",
     ]);

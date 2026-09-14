@@ -29,11 +29,13 @@ describe("buildProductRegistry", () => {
       "expenses.modification",
       "expenses.report",
       "expenses.create",
+      "training.modification",
       "training.report",
       "training.log",
     ]);
     expect(registry.handleByIntent.has("training.log")).toBe(true);
     expect(registry.handleByIntent.has("training.report")).toBe(true);
+    expect(registry.handleByIntent.has("training.modification")).toBe(true);
   });
 
   it("rejects duplicate product ids", () => {
