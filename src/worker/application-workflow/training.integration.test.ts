@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { TrainingLogResult } from "../../products/training/domains/entries/schema.js";
 import type { TrainingReportParams } from "../../products/training/domains/reports/schema.js";
+import { TRAINING_CORRECTION_MISROUTE_MESSAGE } from "../../products/training/domains/entries/correction-guard.js";
 import {
   createWorkflowHarness,
   FIRST_MESSAGE_TIMESTAMP,
@@ -222,7 +223,7 @@ describe("application workflow: training log and report", () => {
       await harness.db.selectFrom("training_entries").selectAll().execute(),
     ).toHaveLength(0);
     await harness.expectConfirmed(
-      "Set corrections are not supported yet. Log a full set (e.g. \"podciąganie 7\") instead.",
+      TRAINING_CORRECTION_MISROUTE_MESSAGE,
     );
     expect(harness.getLlmCalls().map((call) => call.operation)).toEqual([
       "llm.router",

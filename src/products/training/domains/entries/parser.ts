@@ -2,7 +2,8 @@ import type { Config } from "../../../../config.js";
 import { generateStructured } from "../../../../llm/generate.js";
 import { containsPromptInjectionMarker } from "../../../../llm/prompt-data.js";
 import { UserInputError } from "../../../../worker/errors.js";
-import { assertNotDeferredTrainingCorrection } from "./correction-guard.js";
+import { assertNotSetCorrectionMisroute } from "./correction-guard.js";
+import { normalizeTrainingLogDates } from "./date-normalize.js";
 import { getTrainingLogPrompt } from "./prompt.js";
 import {
   trainingLogResultSchema,
@@ -19,7 +20,7 @@ export async function parseTrainingLog(
       "Please send the training log without embedded instructions.",
     );
   }
-  assertNotDeferredTrainingCorrection(text);
+  assertNotSetCorrectionMisroute(text);
 
   const result = await generateStructured(
     config,
@@ -28,5 +29,6 @@ export async function parseTrainingLog(
     "llm.training.log",
   );
 
-  return trainingLogResultSchema.parse(result);
+  const parsed = trainingLogResultSchema.parse(result);
+  return normalizeTrainingLogDates(parsed, text, referenceDate);
 }

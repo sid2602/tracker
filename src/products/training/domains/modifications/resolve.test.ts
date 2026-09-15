@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resolveCorrectableSetEntry } from "../entries/repository.js";
+import { resolveCorrectableSetEntry } from "./repository.js";
 import type { TrainingEntryRow } from "../entries/repository.js";
 
 function entry(

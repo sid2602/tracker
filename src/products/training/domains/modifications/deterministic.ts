@@ -3,12 +3,12 @@
  * Returns null when the text is not a clear correction phrase.
  */
 import type { TrainingModificationResult } from "./schema.js";
-import { looksLikeDeferredTrainingCorrection } from "../entries/correction-guard.js";
+import { looksLikeSetCorrectionPhrase } from "./set-correction-phrases.js";
 
 export function tryParseDeterministicSetCorrection(
   rawText: string,
 ): TrainingModificationResult | null {
-  if (!looksLikeDeferredTrainingCorrection(rawText)) {
+  if (!looksLikeSetCorrectionPhrase(rawText)) {
     return null;
   }
 

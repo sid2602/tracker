@@ -7,6 +7,7 @@ import { isUserInputError, UserInputError } from "../../../../worker/errors.js";
 import type { QueryCreator } from "kysely";
 import type { AppDatabase } from "../../../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../../../worker/types.js";
+import { formatTrainingEntryFields } from "../shared/format-entry.js";
 import { parseTrainingLog } from "./parser.js";
 import {
   insertTrainingEntries,
@@ -51,7 +52,7 @@ export async function persistTrainingLog(
   context: MessageContext,
   parsed: TrainingLogResult,
 ): Promise<HandlerResult> {
-  const safeParsed = trainingLogResultSchema.parse(parsed);
+  const safeParsed = validateTrainingLogResult(parsed);
   if (containsPromptInjectionMarker(context.rawText)) {
     throw new UserInputError(
       "Please send the training log without embedded instructions.",
@@ -125,21 +126,25 @@ function expandOneEntry(
 
 function formatTrainingDetails(entries: TrainingEntryInput[]): string {
   return entries
-    .map((entry) => {
-      const parts = [entry.exercise];
-      if (entry.setIndex !== null) {
-        parts.push(`set ${entry.setIndex}`);
-      }
-      if (entry.reps !== null) {
-        parts.push(`${entry.reps} reps`);
-      }
-      if (entry.weightGrams !== null) {
-        parts.push(`${(entry.weightGrams / 1000).toFixed(1)} kg`);
-      }
-      if (entry.durationSeconds !== null) {
-        parts.push(`${entry.durationSeconds}s`);
-      }
-      return parts.join(" ");
-    })
+    .map((entry) =>
+      formatTrainingEntryFields({
+        exercise: entry.exercise,
+        setIndex: entry.setIndex,
+        reps: entry.reps,
+        weightGrams: entry.weightGrams,
+        durationSeconds: entry.durationSeconds,
+      }),
+    )
     .join("; ");
+}
+
+function validateTrainingLogResult(parsed: TrainingLogResult): TrainingLogResult {
+  const result = trainingLogResultSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new UserInputError(
+      "Could not understand that training log. Please try again with exercise and reps/sets.",
+      result.error,
+    );
+  }
+  return result.data;
 }

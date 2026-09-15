@@ -10,18 +10,18 @@ describe("formatTrainingList", () => {
     const message = formatTrainingList("Today", [
       {
         id: 1,
-        occurred_on: "2026-09-14",
+        occurredOn: "2026-09-14",
         exercise: "podciąganie",
-        set_index: 1,
+        setIndex: 1,
         reps: 8,
-        weight_grams: null,
-        duration_seconds: null,
+        weightGrams: null,
+        durationSeconds: null,
         kind: "strength",
         note: "",
-        source_timestamp: 1,
-        item_index: 0,
-        source_message_key: "m1",
-        source_author: "+1",
+        sourceTimestamp: 1,
+        itemIndex: 0,
+        sourceMessageKey: "m1",
+        sourceAuthor: "+1",
       },
     ]);
     expect(message).toContain("podciąganie");

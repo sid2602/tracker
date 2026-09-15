@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  assertNotDeferredTrainingCorrection,
-  looksLikeDeferredTrainingCorrection,
-  TRAINING_CORRECTION_UNSUPPORTED_MESSAGE,
+  assertNotSetCorrectionMisroute,
+  TRAINING_CORRECTION_MISROUTE_MESSAGE,
 } from "./correction-guard.js";
+import { looksLikeSetCorrectionPhrase } from "../modifications/set-correction-phrases.js";
 import { UserInputError } from "../../../../worker/errors.js";
 
-describe("looksLikeDeferredTrainingCorrection", () => {
+describe("looksLikeSetCorrectionPhrase", () => {
   it.each([
     "3 seria 7",
     "3 serię 7",
@@ -17,7 +17,7 @@ describe("looksLikeDeferredTrainingCorrection", () => {
     "3rd set 7",
     "set 3 was 7",
   ])("detects correction-like %s", (input) => {
-    expect(looksLikeDeferredTrainingCorrection(input)).toBe(true);
+    expect(looksLikeSetCorrectionPhrase(input)).toBe(true);
   });
 
   it.each([
@@ -28,15 +28,15 @@ describe("looksLikeDeferredTrainingCorrection", () => {
     "przysiad 80kg x5",
     "EMOM 12: thruster 15",
   ])("allows normal log %s", (input) => {
-    expect(looksLikeDeferredTrainingCorrection(input)).toBe(false);
+    expect(looksLikeSetCorrectionPhrase(input)).toBe(false);
   });
 
-  it("throws a user-facing error for deferred corrections", () => {
-    expect(() => assertNotDeferredTrainingCorrection("3 seria 7")).toThrow(
+  it("throws a user-facing error for misrouted corrections", () => {
+    expect(() => assertNotSetCorrectionMisroute("3 seria 7")).toThrow(
       UserInputError,
     );
-    expect(() => assertNotDeferredTrainingCorrection("3 seria 7")).toThrow(
-      TRAINING_CORRECTION_UNSUPPORTED_MESSAGE,
+    expect(() => assertNotSetCorrectionMisroute("3 seria 7")).toThrow(
+      TRAINING_CORRECTION_MISROUTE_MESSAGE,
     );
   });
 });

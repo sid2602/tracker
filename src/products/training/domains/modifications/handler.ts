@@ -5,6 +5,8 @@ import { isUserInputError, UserInputError } from "../../../../worker/errors.js";
 import type { QueryCreator } from "kysely";
 import type { AppDatabase } from "../../../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../../../worker/types.js";
+import { formatTrainingEntryFields } from "../shared/format-entry.js";
+import { toTrainingEntryView, type TrainingEntryRow } from "../entries/repository.js";
 import {
   deleteTrainingEntry,
   getLastTrainingEntry,
@@ -12,8 +14,7 @@ import {
   listTrainingEntriesForAuthorOnDay,
   resolveCorrectableSetEntry,
   updateTrainingEntryFields,
-  type TrainingEntryRow,
-} from "../entries/repository.js";
+} from "./repository.js";
 import { parseTrainingModification } from "./parser.js";
 import {
   trainingModificationResultSchema,
@@ -27,7 +28,12 @@ export async function handleTrainingModification(
   try {
     const modification = await analyzeTrainingModification(deps, context);
     return await deps.db.transaction().execute((trx) =>
-      persistTrainingModification(trx, context, modification, deps.now?.() ?? new Date()),
+      persistTrainingModification(
+        trx,
+        context,
+        modification,
+        deps.now?.() ?? new Date(),
+      ),
     );
   } catch (error: unknown) {
     if (isUserInputError(error)) {
@@ -55,9 +61,9 @@ export async function persistTrainingModification(
   db: QueryCreator<AppDatabase>,
   context: MessageContext,
   modification: TrainingModificationResult,
-  now: Date,
+  now: Date = new Date(),
 ): Promise<HandlerResult> {
-  const safe = trainingModificationResultSchema.parse(modification);
+  const safe = validateTrainingModification(modification);
   logger.info({ modification: safe }, "parsed training modification");
 
   if (safe.action === "correct_set") {
@@ -183,10 +189,29 @@ function formatCorrectionMessage(
   entry: TrainingEntryRow,
   reps: number | null,
 ): string {
-  const setLabel =
-    entry.set_index === null ? "set" : `set ${entry.set_index}`;
+  const view = toTrainingEntryView(entry);
+  const base = formatTrainingEntryFields({
+    exercise: view.exercise,
+    setIndex: view.setIndex,
+    reps: null,
+    weightGrams: null,
+    durationSeconds: null,
+  });
   if (reps === null) {
-    return `Updated ${entry.exercise} ${setLabel}.`;
+    return `Updated ${base}.`;
   }
-  return `Updated ${entry.exercise} ${setLabel} to ${reps} reps.`;
+  return `Updated ${base} to ${reps} reps.`;
+}
+
+function validateTrainingModification(
+  modification: TrainingModificationResult,
+): TrainingModificationResult {
+  const result = trainingModificationResultSchema.safeParse(modification);
+  if (!result.success) {
+    throw new UserInputError(
+      "Please identify one training entry by ID or provide an unambiguous set correction.",
+      result.error,
+    );
+  }
+  return result.data;
 }

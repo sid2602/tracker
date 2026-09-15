@@ -19,7 +19,8 @@ export const getTrainingLogPrompt = (
   const prompt = `Extract training set / workout log entries from the user message.
 The message may be in any language.
 Reference date: ${referenceDate} (${TIME_ZONE}).
-If no date is given, use today. Handle relative dates such as "yesterday" / "wczoraj".
+If no date is given, occurredOn MUST be exactly ${referenceDate} (today). Never invent yesterday or another day.
+Handle relative dates such as "yesterday" / "wczoraj" only when the user explicitly writes them.
 
 Output one or more entries in the entries array.
 

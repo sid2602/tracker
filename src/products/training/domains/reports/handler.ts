@@ -5,9 +5,9 @@ import { isUserInputError, UserInputError } from "../../../../worker/errors.js";
 import type { QueryCreator } from "kysely";
 import type { AppDatabase } from "../../../../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "../../../../worker/types.js";
-import { listTrainingEntriesByDay } from "../entries/repository.js";
 import { formatTrainingList } from "./format.js";
 import { parseTrainingReport } from "./parser.js";
+import { listTrainingEntriesByDay } from "./queries.js";
 import {
   trainingReportParamsSchema,
   type TrainingReportParams,
@@ -53,7 +53,7 @@ export async function persistTrainingReport(
     );
   }
 
-  const safeParams = trainingReportParamsSchema.parse(params);
+  const safeParams = validateTrainingReportParams(params);
   const entries = await listTrainingEntriesByDay(
     db,
     { start: safeParams.start_date, end: safeParams.end_date },
@@ -64,4 +64,17 @@ export async function persistTrainingReport(
     kind: "success",
     message: formatTrainingList(safeParams.title, entries),
   };
+}
+
+function validateTrainingReportParams(
+  params: TrainingReportParams,
+): TrainingReportParams {
+  const result = trainingReportParamsSchema.safeParse(params);
+  if (!result.success) {
+    throw new UserInputError(
+      "Could not understand that training report request. Please try again.",
+      result.error,
+    );
+  }
+  return result.data;
 }

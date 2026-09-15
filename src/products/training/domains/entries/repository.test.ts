@@ -2,10 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createTestDatabase } from "../../../../test/fixtures.js";
 import type { Kysely } from "kysely";
 import type { AppDatabase } from "../../../../db/schema.js";
-import {
-  insertTrainingEntries,
-  listTrainingEntriesByDay,
-} from "./repository.js";
+import { insertTrainingEntries } from "./repository.js";
+import { listTrainingEntriesByDay } from "../reports/queries.js";
 
 describe("training entries repository", () => {
   let db: Kysely<AppDatabase>;
@@ -57,6 +55,6 @@ describe("training entries repository", () => {
       { start: "2026-09-14", end: "2026-09-14" },
       null,
     );
-    expect(rows.map((row) => row.source_timestamp)).toEqual([100, 200]);
+    expect(rows.map((row) => row.sourceTimestamp)).toEqual([100, 200]);
   });
 });

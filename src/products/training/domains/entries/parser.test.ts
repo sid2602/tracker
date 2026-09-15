@@ -37,4 +37,27 @@ describe("parseTrainingLog", () => {
     ).rejects.toThrow(UserInputError);
     expect(generateObjectMock).not.toHaveBeenCalled();
   });
+
+  it("forces reference date when the LLM invents yesterday for an undated set", async () => {
+    generateObjectMock.mockResolvedValue({
+      object: {
+        entries: [
+          {
+            exercise: "Podciaganie",
+            occurredOn: "2026-09-14",
+            kind: "strength",
+            reps: 9,
+            weightGrams: null,
+            durationSeconds: null,
+            setIndex: null,
+            setsCount: null,
+            note: "Podciaganie 9",
+          },
+        ],
+      },
+    });
+
+    const result = await parseTrainingLog(config, "Podciaganie 9", "2026-09-15");
+    expect(result.entries[0]?.occurredOn).toBe("2026-09-15");
+  });
 });
