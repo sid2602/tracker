@@ -1,6 +1,6 @@
-# Signal Expense Tracker
+# Signal Multi-Product Tracker
 
-A background worker process connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC to categorize and track expenses via a Signal conversation. Built with TypeScript, Node.js, and Vercel AI SDK.
+A background worker connecting directly to the `signal-cli` daemon over raw TCP JSON-RPC. One Signal number hosts multiple products (expenses + training) via semantic routing into a shared SQLite inbox. Built with TypeScript, Node.js, and Vercel AI SDK.
 
 ## Commands
 
@@ -22,7 +22,7 @@ SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npm run test:eval
 
 To run evaluation tests for a specific domain to save tokens (e.g. `modifications`):
 ```bash
-RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/domains/modifications/parser.eval.test.ts
+RUN_EVALS=true SIGNAL_RPC_HOST=localhost SIGNAL_RPC_PORT=6001 npx vitest run src/products/expenses/domains/modifications/parser.eval.test.ts
 ```
 
 The worker reads `SIGNAL_RPC_HOST` and `SIGNAL_RPC_PORT` and connects to the

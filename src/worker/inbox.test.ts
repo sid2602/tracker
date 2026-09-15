@@ -140,7 +140,7 @@ describe("inbox", () => {
 
   const expenseAnalysis: MessageAnalysis = {
     version: 1,
-    intent: "expense",
+    intent: "expenses.create",
     parsed: {
       items: [
         {

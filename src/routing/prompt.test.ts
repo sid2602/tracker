@@ -42,10 +42,10 @@ describe("getRouterPrompt", () => {
 
   it("renders every card once in the supplied order", () => {
     const cards = [
-      createCard("category", "CATEGORY_CARD"),
-      createCard("modification", "MODIFICATION_CARD"),
-      createCard("report", "REPORT_CARD"),
-      createCard("expense", "EXPENSE_CARD"),
+      createCard("expenses.category", "CATEGORY_CARD"),
+      createCard("expenses.modification", "MODIFICATION_CARD"),
+      createCard("expenses.report", "REPORT_CARD"),
+      createCard("expenses.create", "EXPENSE_CARD"),
     ];
 
     const prompt = getRouterPrompt(
@@ -79,7 +79,7 @@ describe("getRouterPrompt", () => {
 
   it("rejects a card with too many examples", () => {
     const card: RoutingCard = {
-      ...createCard("expense", "EXPENSE_CARD"),
+      ...createCard("expenses.create", "EXPENSE_CARD"),
       examples: ["one", "two", "three", "four", "five", "six"],
     };
 
@@ -90,7 +90,7 @@ describe("getRouterPrompt", () => {
 
   it("rejects an oversized card", () => {
     const card: RoutingCard = {
-      ...createCard("expense", "EXPENSE_CARD"),
+      ...createCard("expenses.create", "EXPENSE_CARD"),
       object: "x".repeat(MAX_ROUTING_CARD_CHARACTERS),
     };
 
@@ -103,7 +103,7 @@ describe("getRouterPrompt", () => {
     const cards = Array.from(
       { length: 7 },
       (_, index): RoutingCard => ({
-        intent: "expense",
+        intent: "expenses.create",
         object: `card-${index}-${"x".repeat(1400)}`,
         goal: "goal",
         localRules: [],

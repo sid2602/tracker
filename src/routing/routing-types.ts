@@ -4,6 +4,7 @@ import {
   MAX_USER_PROMPT_DATA_CHARACTERS,
 } from "../llm/prompt-data.js";
 
+/** Derived from the live router schema (ADR 0014). */
 export type ActionableIntent = Exclude<RouterResult["intent"], "ignore">;
 
 export type RoutingCard = {

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { ExpenseResult } from "../../domains/expenses/schema.js";
-import type { ReportParams } from "../../domains/reports/schema.js";
+import type { ExpenseResult } from "../../products/expenses/domains/expenses/schema.js";
+import type { ReportParams } from "../../products/expenses/domains/reports/schema.js";
 import {
   createWorkflowHarness,
   FIRST_MESSAGE_TIMESTAMP,
@@ -33,7 +33,7 @@ describe("application workflow: expenses and reports", () => {
       ],
     };
 
-    harness.scriptLlm("llm.router", { intent: "expense" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.create" }, [rawText]);
     harness.scriptLlm("llm.expense", parsedExpense, [
       rawText,
       REFERENCE_DATE,
@@ -82,7 +82,7 @@ describe("application workflow: expenses and reports", () => {
       ],
     };
 
-    harness.scriptLlm("llm.router", { intent: "expense" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.create" }, [rawText]);
     harness.scriptLlm("llm.expense", parsedExpense, [
       rawText,
       REFERENCE_DATE,
@@ -129,7 +129,7 @@ describe("application workflow: expenses and reports", () => {
       title: "Wrzesień",
       group_by: "total",
     };
-    harness.scriptLlm("llm.router", { intent: "report" }, [rawText]);
+    harness.scriptLlm("llm.router", { intent: "expenses.report" }, [rawText]);
     harness.scriptLlm("llm.report.parse", parsedReport, [
       rawText,
       REFERENCE_DATE,

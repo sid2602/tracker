@@ -1,26 +1,12 @@
-import {
-  analyzeExpense,
-  handleExpense,
-  persistExpense,
-} from "../domains/expenses/index.js";
 import { logger } from "../lib/logger.js";
-import {
-  analyzeReport,
-  handleReport,
-  persistReport,
-} from "../domains/reports/index.js";
-import {
-  analyzeModification,
-  handleModification,
-  persistModification,
-} from "../domains/modifications/index.js";
-import {
-  analyzeCategory,
-  handleCategory,
-  persistCategory,
-} from "../domains/categories/index.js";
 import { UNRECOGNIZED_MESSAGE } from "../lib/messages.js";
+import { productRegistry } from "../products/index.js";
 import { routeMessage } from "../routing/router.js";
+import {
+  isCanonicalActionableIntent,
+  toCanonicalIntent,
+  type CanonicalIntent,
+} from "../routing/intents.js";
 import { recordMessageTrace } from "../tracing.js";
 import type { RouterResult } from "../routing/schema.js";
 import type { QueryCreator } from "kysely";
@@ -28,24 +14,23 @@ import type { AppDatabase } from "../db/schema.js";
 import type { AppDeps, HandlerResult, MessageContext } from "./types.js";
 import type { MessageAnalysis } from "./analysis.js";
 import { isUserInputError } from "./errors.js";
+import { messageAnalysisSchema } from "./analysis.js";
 
 export async function dispatchMessage(
   deps: AppDeps,
   context: MessageContext,
   route: RouterResult,
 ): Promise<HandlerResult> {
-  switch (route.intent) {
-    case "expense":
-      return handleExpense(deps, context);
-    case "report":
-      return handleReport(deps, context);
-    case "category":
-      return handleCategory(deps, context);
-    case "modification":
-      return handleModification(deps, context);
-    case "ignore":
-      return { kind: "silent" };
+  const intent = toCanonicalIntent(route.intent);
+  if (!isCanonicalActionableIntent(intent)) {
+    return { kind: "silent" };
   }
+
+  const handle = productRegistry.handleByIntent.get(intent);
+  if (handle === undefined) {
+    throw new Error(`No handle registered for intent "${intent}"`);
+  }
+  return handle(deps, context);
 }
 
 export async function analyzeMessage(
@@ -55,34 +40,22 @@ export async function analyzeMessage(
   const route = await routeMessage(deps.config, context.rawText);
   logger.info({ route }, "routed message intent");
 
-  switch (route.intent) {
-    case "expense":
-      return {
-        version: 1,
-        intent: "expense",
-        parsed: await analyzeExpense(deps, context),
-      };
-    case "report":
-      return {
-        version: 1,
-        intent: "report",
-        parsed: await analyzeReport(deps, context),
-      };
-    case "category":
-      return {
-        version: 1,
-        intent: "category",
-        parsed: await analyzeCategory(deps, context),
-      };
-    case "modification":
-      return {
-        version: 1,
-        intent: "modification",
-        parsed: await analyzeModification(deps, context),
-      };
-    case "ignore":
-      return { version: 1, intent: "ignore" };
+  const intent = toCanonicalIntent(route.intent);
+  if (!isCanonicalActionableIntent(intent)) {
+    return { version: 1, intent: "ignore" };
   }
+
+  const analyze = productRegistry.analyzeByIntent.get(intent);
+  if (analyze === undefined) {
+    throw new Error(`No analyze registered for intent "${intent}"`);
+  }
+
+  const parsed = await analyze(deps, context);
+  return messageAnalysisSchema.parse({
+    version: 1,
+    intent,
+    parsed,
+  });
 }
 
 export async function persistAnalyzedMessage(
@@ -91,18 +64,15 @@ export async function persistAnalyzedMessage(
   analysis: MessageAnalysis,
   db: QueryCreator<AppDatabase> = deps.db,
 ): Promise<HandlerResult> {
-  switch (analysis.intent) {
-    case "expense":
-      return persistExpense(db, context, analysis.parsed);
-    case "report":
-      return persistReport(db, context.rawText, analysis.parsed);
-    case "category":
-      return persistCategory(db, context.rawText, analysis.parsed);
-    case "modification":
-      return persistModification(db, context, analysis.parsed);
-    case "ignore":
-      return { kind: "silent" };
+  if (analysis.intent === "ignore") {
+    return { kind: "silent" };
   }
+
+  const persist = productRegistry.persistByIntent.get(analysis.intent);
+  if (persist === undefined) {
+    throw new Error(`No persist registered for intent "${analysis.intent}"`);
+  }
+  return persist(deps, context, analysis.parsed, db);
 }
 
 export async function processMessage(
@@ -144,7 +114,7 @@ export function recordProcessedMessageTrace(
   result: HandlerResult,
 ): void {
   recordMessageTrace({
-    metadata: buildTraceMetadata(route, result),
+    metadata: buildTraceMetadata(toCanonicalIntent(route.intent), result),
     output: buildTraceOutput(result),
   });
 }
@@ -170,11 +140,11 @@ function buildTraceOutput(result: HandlerResult): unknown {
 }
 
 function buildTraceMetadata(
-  route: RouterResult,
+  intent: CanonicalIntent,
   result: HandlerResult,
 ): Record<string, string | number | boolean | null> {
   const metadata: Record<string, string | number | boolean | null> = {
-    intent: route.intent,
+    intent,
     resultKind: result.kind,
   };
 

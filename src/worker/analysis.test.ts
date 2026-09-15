@@ -7,10 +7,10 @@ import {
 } from "./analysis.js";
 
 describe("message analysis persistence", () => {
-  it("round-trips a parsed expense command", () => {
+  it("round-trips a parsed expense command with canonical intent", () => {
     const analysis: MessageAnalysis = {
       version: 1,
-      intent: "expense",
+      intent: "expenses.create",
       parsed: {
         items: [
           {
@@ -24,7 +24,43 @@ describe("message analysis persistence", () => {
       },
     };
 
-    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(analysis);
+    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(
+      analysis,
+    );
+  });
+
+  it("normalizes legacy persisted expense intents on replay", () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      intent: "expense",
+      parsed: {
+        items: [
+          {
+            amountCents: 1250,
+            currency: "PLN",
+            category: "food",
+            occurredOn: "2026-09-11",
+            note: "kawa",
+          },
+        ],
+      },
+    });
+
+    expect(parseMessageAnalysis(legacy)).toEqual({
+      version: 1,
+      intent: "expenses.create",
+      parsed: {
+        items: [
+          {
+            amountCents: 1250,
+            currency: "PLN",
+            category: "food",
+            occurredOn: "2026-09-11",
+            note: "kawa",
+          },
+        ],
+      },
+    });
   });
 
   it("round-trips an ignored command", () => {
@@ -33,14 +69,42 @@ describe("message analysis persistence", () => {
       intent: "ignore",
     };
 
-    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(analysis);
+    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(
+      analysis,
+    );
+  });
+
+  it("round-trips a training log command", () => {
+    const analysis: MessageAnalysis = {
+      version: 1,
+      intent: "training.log",
+      parsed: {
+        entries: [
+          {
+            exercise: "podciąganie",
+            occurredOn: "2026-09-14",
+            kind: "strength",
+            reps: 8,
+            weightGrams: null,
+            durationSeconds: null,
+            setIndex: 1,
+            setsCount: null,
+            note: "",
+          },
+        ],
+      },
+    };
+
+    expect(parseMessageAnalysis(serializeMessageAnalysis(analysis))).toEqual(
+      analysis,
+    );
   });
 
   it("rejects an invalid persisted command", () => {
     expect(() =>
       messageAnalysisSchema.parse({
         version: 2,
-        intent: "expense",
+        intent: "expenses.create",
         parsed: { items: [] },
       }),
     ).toThrow();
